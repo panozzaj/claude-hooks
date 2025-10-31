@@ -7,12 +7,13 @@ automatic fixing and provide the LLM with non-blocking feedback.
 
 I had the following design principles:
 
-  1. Make it modular: easily add and configure linters for different projects
-  2. Provide minimal output to save tokens
-  3. Auto-fix when possible, and provide that output to the LLM to reduce future churn
-  4. Use plain `bash` for maximum compatibility and minimal setup
+ - Comply with the Claude Code hook interface specification
+ - Make it modular: easily add and configure linters for different projects
+ - Provide minimal output to save tokens
+ - Auto-fix issues when possible, and provide that output to the LLM to reduce future churn
+ - Output errors when not auto-correctable, so that the LLM can fix
+ - Use plain `bash` for maximum compatibility and minimal setup
    - Tested with [`bats-core`](https://github.com/bats-core/bats-core)
-  5. Comply with the Claude Code hook interface specification
 
 ## Scripts
 
