@@ -3,6 +3,16 @@
 Linter hook scripts for Claude Code that provide consistent output and
 automatic fixing and provide the LLM with non-blocking feedback.
 
+## Design principles
+
+I had the following design principles:
+
+  1. Make it modular: easily add and configure linters for different projects
+  2. Provide minimal output to save tokens
+  3. Auto-fix when possible, and provide that output to the LLM to reduce future churn
+  4. Use plain `bash` for maximum compatibility (tested with [`bats-core`](https://github.com/bats-core/bats-core)) and minimal setup
+  5. Comply with the Claude Code hook interface specification
+
 ## Scripts
 
 All PostToolUse hook scripts are in the `scripts/PostToolUse/` directory:
@@ -39,7 +49,7 @@ To use in your project, add the following to your Claude Code configuration:
 }
 ```
 
-This should go in `./claude/settings.local.json`.
+This should go in `./claude/settings.local.json` (see below for possible hook locations).
 
 Note: you'll have to restart claude code for changes to take effect. Typically I `/exit` and then restart with `claude -c` and state that I restarted.
 
@@ -111,10 +121,4 @@ When setting up hooks, you have three options:
 2. **Project settings** - Checked in at `.claude/settings.json` (shared with team)
 3. **User settings** - Saved in `~/.claude/settings.json` (global to your machine)
 
-## Design Philosophy
-
-These scripts are designed for **Claude Code hooks**, not git hooks:
-- Claude Code passes files explicitly as arguments
-- No git auto-detection
-- Consistent output format across all linters
-- Auto-fix when possible, clear errors when not
+Typically, local project settings are best for hook scripts, as they can vary per project and most likely won't be shared.
