@@ -39,7 +39,9 @@ To use in your project, add the following to your Claude Code configuration:
 }
 ```
 
-Note: this should go in ./claude/settings.local.json or equivalent.
+This should go in `./claude/settings.local.json`.
+
+Note: you'll have to restart claude code for changes to take effect. Typically I `/exit` and then restart with `claude -c` and state that I restarted.
 
 
 ## Output Format
