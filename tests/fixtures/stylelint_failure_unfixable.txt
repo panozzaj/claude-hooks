@@ -1,0 +1,5 @@
+
+app/assets/stylesheets/application.scss
+ 5:1  ✖  Unexpected unknown property "colr"  property-no-unknown
+
+1 problem (1 error, 0 warnings)

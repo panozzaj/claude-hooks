@@ -1,0 +1,9 @@
+Inspecting 2 files
+CC
+
+Offenses:
+
+app/models/user.rb:5:1: C: [Corrected] Layout/TrailingWhitespace: Trailing whitespace detected.
+app/models/user.rb:10:3: C: [Corrected] Style/StringLiterals: Prefer single-quoted strings when you don't need string interpolation or special symbols.
+
+2 files inspected, 2 offenses detected, 2 offenses corrected

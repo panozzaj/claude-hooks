@@ -1,0 +1,118 @@
+#!/bin/bash
+# Script to run TypeScript type checking on changed TypeScript files
+# Usage:
+#   - As Claude Code hook: receives JSON via STDIN
+#   - Direct invocation: typescript_check_changed_files [-v|--verbose] [file1 file2 ...]
+#
+# See ../../docs/hook_interface.md for interface specification and exit code behavior
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+GRAY='\033[0;90m'
+NC='\033[0m' # No Color
+
+# Parse verbose flag
+VERBOSE=false
+FILES_ARG=()
+for arg in "$@"; do
+  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
+    VERBOSE=true
+  else
+    FILES_ARG+=("$arg")
+  fi
+done
+
+# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
+CHANGED_FILES=""
+
+# Check if we have command-line file arguments (for direct invocation / testing)
+if [ ${#FILES_ARG[@]} -gt 0 ]; then
+  CHANGED_FILES="${FILES_ARG[*]}"
+else
+  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
+  # Check if STDIN is not a terminal (i.e., data is being piped/redirected)
+  if [ ! -t 0 ]; then
+    # Read all of STDIN
+    HOOK_JSON=$(cat)
+
+    # Extract file_path from JSON using grep and sed
+    # Handles both tool_input.file_path and tool_response.filePath
+    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+
+    if [ -z "$FILE_PATH" ]; then
+      # Try alternative field name
+      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+    fi
+
+    # Only check TypeScript files
+    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.(ts|tsx)$ ]]; then
+      CHANGED_FILES="$FILE_PATH"
+    fi
+  fi
+fi
+
+# Filter for only TypeScript files
+TS_FILES=$(echo "$CHANGED_FILES" | tr ' ' '\n' | grep -E '\.(ts|tsx)$' || true)
+
+if [ -z "$TS_FILES" ]; then
+  echo -e "tsc: ${GRAY}N/A${NC}"
+  exit 0
+fi
+
+# Check if TypeScript is available
+if ! command -v npm &> /dev/null; then
+  echo -e "tsc: ${GRAY}skipped (npm not found)${NC}"
+  exit 0
+fi
+
+# Check if package.json exists
+if [ ! -f "package.json" ]; then
+  echo -e "tsc: ${GRAY}skipped (no package.json)${NC}"
+  exit 0
+fi
+
+# Check if tsconfig.json exists
+if [ ! -f "tsconfig.json" ]; then
+  echo -e "tsc: ${GRAY}skipped (no tsconfig.json)${NC}"
+  exit 0
+fi
+
+if [ "$VERBOSE" = true ]; then
+  echo "Changed TypeScript files detected:"
+  echo "$TS_FILES" | sed 's/^/  /'
+  echo ""
+  echo "Running TypeScript type checker..."
+  echo ""
+fi
+
+# Run TypeScript type checking
+# Use npm run typecheck if available, otherwise use npx tsc directly
+TSC_OUTPUT=$(mktemp)
+
+set +e
+if grep -q '"typecheck"' package.json; then
+  npm run typecheck > "$TSC_OUTPUT" 2>&1
+else
+  npx tsc --noEmit > "$TSC_OUTPUT" 2>&1
+fi
+TSC_STATUS=$?
+set -e
+
+if [ $TSC_STATUS -eq 0 ]; then
+  # Exit 0: success - no type errors
+  echo -e "tsc: ${GREEN}✓${NC}"
+  rm "$TSC_OUTPUT"
+  exit 0
+else
+  # Exit 2: blocking error - type errors found
+  # Filter output to only show errors related to changed files if possible
+  cat "$TSC_OUTPUT" >&2
+  echo "" >&2
+  echo -e "tsc: ${RED}✗${NC}" >&2
+  rm "$TSC_OUTPUT"
+  exit 2
+fi

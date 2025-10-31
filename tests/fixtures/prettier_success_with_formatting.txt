@@ -1,0 +1,3 @@
+app/javascript/controllers/user_controller.js
+config/settings.json
+README.md

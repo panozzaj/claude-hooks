@@ -1,0 +1,2 @@
+Syntax error in app/views/users/show.html.haml:
+  Illegal nesting: nesting within plain text is illegal.

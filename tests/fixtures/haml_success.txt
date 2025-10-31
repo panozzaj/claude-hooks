@@ -1,0 +1,1 @@
+HAML syntax check passed for all files

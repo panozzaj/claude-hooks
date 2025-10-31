@@ -1,0 +1,112 @@
+#!/bin/bash
+# Script to run ESLint on changed JavaScript files
+# Usage:
+#   - As Claude Code hook: receives JSON via STDIN
+#   - Direct invocation: eslint_changed_files [-v|--verbose] [file1 file2 ...]
+#
+# See ../../docs/hook_interface.md for interface specification and exit code behavior
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+GRAY='\033[0;90m'
+NC='\033[0m' # No Color
+
+# Parse verbose flag
+VERBOSE=false
+FILES_ARG=()
+for arg in "$@"; do
+  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
+    VERBOSE=true
+  else
+    FILES_ARG+=("$arg")
+  fi
+done
+
+# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
+CHANGED_FILES=""
+
+# Check if we have command-line file arguments (for direct invocation / testing)
+if [ ${#FILES_ARG[@]} -gt 0 ]; then
+  CHANGED_FILES="${FILES_ARG[*]}"
+else
+  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
+  # Check if STDIN is not a terminal (i.e., data is being piped/redirected)
+  if [ ! -t 0 ]; then
+    # Read all of STDIN
+    HOOK_JSON=$(cat)
+
+    # Extract file_path from JSON using grep and sed
+    # Handles both tool_input.file_path and tool_response.filePath
+    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+
+    if [ -z "$FILE_PATH" ]; then
+      # Try alternative field name
+      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+    fi
+
+    # Only check JavaScript/TypeScript files
+    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.(js|jsx|ts|tsx)$ ]]; then
+      CHANGED_FILES="$FILE_PATH"
+    fi
+  fi
+fi
+
+if [ -z "$CHANGED_FILES" ]; then
+  echo -e "eslint: ${GRAY}N/A${NC}"
+  exit 0
+fi
+
+# Determine ESLint command
+if [ -x "./bin/eslint" ]; then
+  ESLINT_CMD="./bin/eslint"
+elif command -v yarn &> /dev/null; then
+  ESLINT_CMD="yarn eslint"
+else
+  ESLINT_CMD="npx eslint"
+fi
+
+if [ "$VERBOSE" = true ]; then
+  echo "Changed JavaScript files detected:"
+  echo "$CHANGED_FILES" | sed 's/^/  /'
+  echo ""
+  echo "Running ESLint with auto-fix..."
+  echo ""
+fi
+
+# Run ESLint with auto-fix
+# Capture output to provide detailed feedback
+ESLINT_OUTPUT=$(mktemp)
+
+# Use 'set +e' temporarily to capture exit status without script failing
+set +e
+$ESLINT_CMD --fix $CHANGED_FILES > "$ESLINT_OUTPUT" 2>&1
+ESLINT_STATUS=$?
+set -e
+
+if [ $ESLINT_STATUS -eq 0 ]; then
+  # Exit 0: success (with or without auto-corrections)
+  # Check if there was any output (issues found and fixed, or warnings)
+  if [ -s "$ESLINT_OUTPUT" ]; then
+    # Show what was found/fixed for LLM feedback
+    cat "$ESLINT_OUTPUT"
+    echo ""
+    echo -e "eslint: ${GREEN}✓${NC}"
+  else
+    # No issues - just show green check
+    echo -e "eslint: ${GREEN}✓${NC}"
+  fi
+  rm "$ESLINT_OUTPUT"
+  exit 0
+else
+  # Exit 2: blocking error - unfixable issues
+  # Output to stderr for Claude to see and fix
+  cat "$ESLINT_OUTPUT" >&2
+  echo "" >&2
+  echo -e "eslint: ${RED}✗${NC}" >&2
+  rm "$ESLINT_OUTPUT"
+  exit 2
+fi

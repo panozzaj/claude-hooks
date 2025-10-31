@@ -1,0 +1,34 @@
+#!/bin/bash
+# Run all tests for Claude Code hook scripts
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Change to tests directory
+cd "$(dirname "$0")"
+
+echo -e "${BLUE}Running tests for Claude Code hook scripts...${NC}"
+echo ""
+
+# Check if bats is installed
+if ! command -v bats &> /dev/null; then
+  echo -e "${RED}Error: bats-core is not installed${NC}"
+  echo "Install it with: brew install bats-core"
+  exit 1
+fi
+
+# Run all tests (*.bats files in current directory)
+if bats *.bats; then
+  echo ""
+  echo -e "${GREEN}✓ All tests passed!${NC}"
+  exit 0
+else
+  echo ""
+  echo -e "${RED}✗ Some tests failed${NC}"
+  exit 1
+fi

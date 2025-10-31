@@ -1,0 +1,133 @@
+#!/bin/bash
+# Script to run HAML syntax checking on changed HAML files
+# Usage:
+#   - As Claude Code hook: receives JSON via STDIN
+#   - Direct invocation: haml_check_changed_files [-v|--verbose] [file1 file2 ...]
+#
+# See ../../docs/hook_interface.md for interface specification and exit code behavior
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+GRAY='\033[0;90m'
+NC='\033[0m' # No Color
+
+# Parse verbose flag
+VERBOSE=false
+FILES_ARG=()
+for arg in "$@"; do
+  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
+    VERBOSE=true
+  else
+    FILES_ARG+=("$arg")
+  fi
+done
+
+# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
+CHANGED_FILES=""
+
+# Check if we have command-line file arguments (for direct invocation / testing)
+if [ ${#FILES_ARG[@]} -gt 0 ]; then
+  CHANGED_FILES="${FILES_ARG[*]}"
+else
+  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
+  # Check if STDIN is not a terminal (i.e., data is being piped/redirected)
+  if [ ! -t 0 ]; then
+    # Read all of STDIN
+    HOOK_JSON=$(cat)
+
+    # Extract file_path from JSON using grep and sed
+    # Handles both tool_input.file_path and tool_response.filePath
+    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+
+    if [ -z "$FILE_PATH" ]; then
+      # Try alternative field name
+      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+    fi
+
+    # Only check HAML files
+    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.haml$ ]]; then
+      CHANGED_FILES="$FILE_PATH"
+    fi
+  fi
+fi
+
+if [ -z "$CHANGED_FILES" ]; then
+  echo -e "haml: ${GRAY}N/A${NC}"
+  exit 0
+fi
+
+if [ "$VERBOSE" = true ]; then
+  echo "Changed HAML files detected:"
+  echo "$CHANGED_FILES" | sed 's/^/  /'
+  echo ""
+fi
+
+# Filter to only files that exist
+FILTERED_FILES=""
+for file in $CHANGED_FILES; do
+  if [ -f "$file" ]; then
+    FILTERED_FILES="$FILTERED_FILES $file"
+  elif [ "$VERBOSE" = true ]; then
+    echo -e "${YELLOW}Skipping non-existent file: $file${NC}"
+  fi
+done
+
+# Trim leading whitespace
+FILTERED_FILES=$(echo "$FILTERED_FILES" | sed 's/^ *//')
+
+if [ -z "$FILTERED_FILES" ]; then
+  echo -e "haml: ${GRAY}N/A${NC}"
+  exit 0
+fi
+
+if [ "$VERBOSE" = true ]; then
+  echo ""
+  echo "Running HAML syntax check on:"
+  echo "$FILTERED_FILES" | tr ' ' '\n' | sed 's/^/  /'
+  echo ""
+fi
+
+# Find the check_haml_syntax script
+# Prefer project-local version, then fall back to PATH
+CHECK_HAML_SCRIPT=""
+if [ -x "./bin/check_haml_syntax" ]; then
+  CHECK_HAML_SCRIPT="./bin/check_haml_syntax"
+elif [ -x "./bin/scripts/check_haml_syntax" ]; then
+  CHECK_HAML_SCRIPT="./bin/scripts/check_haml_syntax"
+elif [ -x "bin/scripts/check_haml_syntax" ]; then
+  CHECK_HAML_SCRIPT="bin/scripts/check_haml_syntax"
+elif command -v check_haml_syntax &> /dev/null; then
+  CHECK_HAML_SCRIPT="check_haml_syntax"
+fi
+
+if [ -z "$CHECK_HAML_SCRIPT" ]; then
+  echo -e "${RED}✗ check_haml_syntax script not found in bin/scripts/ or PATH${NC}" >&2
+  exit 1
+fi
+
+# Run HAML syntax check
+# Capture output to provide consistent formatting
+HAML_OUTPUT=$(mktemp)
+set +e  # Temporarily disable exit on error to capture the exit code
+$CHECK_HAML_SCRIPT $FILTERED_FILES > "$HAML_OUTPUT" 2>&1
+HAML_STATUS=$?
+set -e  # Re-enable exit on error
+
+if [ $HAML_STATUS -eq 0 ]; then
+  # Success - HAML syntax valid (no auto-correction capability)
+  echo -e "haml: ${GREEN}✓${NC}"
+  rm "$HAML_OUTPUT"
+  exit 0
+else
+  # Exit 2: blocking error - syntax errors found
+  # Output to stderr for Claude to see and fix
+  cat "$HAML_OUTPUT" >&2
+  echo "" >&2
+  echo -e "haml: ${RED}✗${NC}" >&2
+  rm "$HAML_OUTPUT"
+  exit 2
+fi

@@ -1,0 +1,5 @@
+[error] app/javascript/malformed.js: SyntaxError: Unexpected token (5:10)
+[error]   3 | function test() {
+[error]   4 |   const x = 1
+[error] > 5 |   return x
+[error]     |          ^

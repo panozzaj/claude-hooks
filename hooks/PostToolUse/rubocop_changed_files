@@ -1,0 +1,121 @@
+#!/bin/bash
+# Script to run RuboCop on changed Ruby files, respecting .rubocop.yml exclusions
+# Usage:
+#   - As Claude Code hook: receives JSON via STDIN
+#   - Direct invocation: rubocop_changed_files [-v|--verbose] [file1 file2 ...]
+#
+# See ../../docs/hook_interface.md for interface specification and exit code behavior
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+GRAY='\033[0;90m'
+NC='\033[0m' # No Color
+
+# Parse verbose flag
+VERBOSE=false
+FILES_ARG=()
+for arg in "$@"; do
+  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
+    VERBOSE=true
+  else
+    FILES_ARG+=("$arg")
+  fi
+done
+
+# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
+CHANGED_FILES=""
+
+# Check if we have command-line file arguments (for direct invocation / testing)
+if [ ${#FILES_ARG[@]} -gt 0 ]; then
+  CHANGED_FILES="${FILES_ARG[*]}"
+else
+  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
+  # Check if STDIN is not a terminal (i.e., data is being piped/redirected)
+  if [ ! -t 0 ]; then
+    # Read all of STDIN
+    HOOK_JSON=$(cat)
+
+    # Debug: save JSON to temp file if needed
+    # echo "$HOOK_JSON" > /tmp/rubocop-hook-json.txt
+
+    # Extract file_path from JSON using grep and sed
+    # Handles both tool_input.file_path and tool_response.filePath
+    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+
+    if [ -z "$FILE_PATH" ]; then
+      # Try alternative field name
+      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+    fi
+
+    # Only check Ruby files
+    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.rb$ ]]; then
+      CHANGED_FILES="$FILE_PATH"
+    fi
+  fi
+fi
+
+if [ -z "$CHANGED_FILES" ]; then
+  echo -e "rubocop: ${GRAY}N/A${NC}"
+  exit 0
+fi
+
+# Determine RuboCop command
+if [ -x "./bin/rubocop" ]; then
+  RUBOCOP_CMD="./bin/rubocop"
+elif command -v bundle &> /dev/null; then
+  RUBOCOP_CMD="bundle exec rubocop"
+else
+  RUBOCOP_CMD="rubocop"
+fi
+
+if [ "$VERBOSE" = true ]; then
+  echo "Changed Ruby files detected:"
+  echo "$CHANGED_FILES" | sed 's/^/  /'
+  echo ""
+  echo "Running RuboCop with auto-correct (--force-exclusion respects .rubocop.yml exclusions)..."
+  echo ""
+fi
+
+# Run RuboCop with auto-correction and --force-exclusion
+# --force-exclusion ensures excluded files are skipped even when explicitly passed
+# Capture output to detect if corrections were made
+RUBOCOP_OUTPUT=$(mktemp)
+
+# Use 'set +e' temporarily to capture exit status without script failing
+set +e
+$RUBOCOP_CMD -A --force-exclusion $CHANGED_FILES > "$RUBOCOP_OUTPUT" 2>&1
+RUBOCOP_STATUS=$?
+set -e
+
+# Check if auto-corrections were applied by looking for "corrected" in output
+CORRECTIONS_MADE=false
+if grep -q "corrected" "$RUBOCOP_OUTPUT"; then
+  CORRECTIONS_MADE=true
+fi
+
+if [ $RUBOCOP_STATUS -eq 0 ]; then
+  # Exit 0: success (with or without auto-corrections)
+  if [ "$CORRECTIONS_MADE" = true ]; then
+    # Show corrections for LLM feedback
+    cat "$RUBOCOP_OUTPUT"
+    echo ""
+    echo -e "rubocop: ${GREEN}✓${NC}"
+  else
+    # No changes needed - just show green check
+    echo -e "rubocop: ${GREEN}✓${NC}"
+  fi
+  rm "$RUBOCOP_OUTPUT"
+  exit 0
+else
+  # Exit 2: blocking error - unautocorrectable issues
+  # Output to stderr for Claude to see and fix
+  cat "$RUBOCOP_OUTPUT" >&2
+  echo "" >&2
+  echo -e "rubocop: ${RED}✗${NC}" >&2
+  rm "$RUBOCOP_OUTPUT"
+  exit 2
+fi

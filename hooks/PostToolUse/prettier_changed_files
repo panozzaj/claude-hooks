@@ -1,0 +1,121 @@
+#!/bin/bash
+# Script to run Prettier on changed files
+# Usage:
+#   - As Claude Code hook: receives JSON via STDIN
+#   - Direct invocation: prettier_changed_files [-v|--verbose] [file1 file2 ...]
+#
+# See ../../docs/hook_interface.md for interface specification and exit code behavior
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+GRAY='\033[0;90m'
+NC='\033[0m' # No Color
+
+# Parse verbose flag
+VERBOSE=false
+FILES_ARG=()
+for arg in "$@"; do
+  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
+    VERBOSE=true
+  else
+    FILES_ARG+=("$arg")
+  fi
+done
+
+# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
+CHANGED_FILES=""
+
+# Check if we have command-line file arguments (for direct invocation / testing)
+if [ ${#FILES_ARG[@]} -gt 0 ]; then
+  CHANGED_FILES="${FILES_ARG[*]}"
+else
+  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
+  # Check if STDIN is not a terminal (i.e., data is being piped/redirected)
+  if [ ! -t 0 ]; then
+    # Read all of STDIN
+    HOOK_JSON=$(cat)
+
+    # Extract file_path from JSON using grep and sed
+    # Handles both tool_input.file_path and tool_response.filePath
+    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+
+    if [ -z "$FILE_PATH" ]; then
+      # Try alternative field name
+      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+    fi
+
+    # Only check files prettier handles (js, jsx, ts, tsx, json, css, scss, md, etc.)
+    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.(js|jsx|ts|tsx|json|css|scss|less|md|html|yml|yaml)$ ]]; then
+      CHANGED_FILES="$FILE_PATH"
+    fi
+  fi
+fi
+
+if [ -z "$CHANGED_FILES" ]; then
+  echo -e "prettier: ${GRAY}N/A${NC}"
+  exit 0
+fi
+
+# Determine Prettier command
+if [ -x "./bin/prettier" ]; then
+  PRETTIER_CMD="./bin/prettier"
+elif command -v yarn &> /dev/null; then
+  PRETTIER_CMD="yarn prettier"
+else
+  PRETTIER_CMD="npx prettier"
+fi
+
+if [ "$VERBOSE" = true ]; then
+  echo "Changed files detected:"
+  echo "$CHANGED_FILES" | sed 's/^/  /'
+  echo ""
+  echo "Running Prettier with auto-format..."
+  echo ""
+fi
+
+# Run Prettier with auto-format
+# First check what needs formatting to provide detailed feedback
+PRETTIER_CHECK_OUTPUT=$(mktemp)
+PRETTIER_WRITE_OUTPUT=$(mktemp)
+
+# Use 'set +e' temporarily to capture exit status without script failing
+set +e
+
+# Run --check first to see what needs formatting (exit 1 if formatting needed)
+$PRETTIER_CMD --check $CHANGED_FILES > "$PRETTIER_CHECK_OUTPUT" 2>&1
+CHECK_STATUS=$?
+
+if [ $CHECK_STATUS -eq 0 ]; then
+  # No formatting needed
+  rm "$PRETTIER_CHECK_OUTPUT" "$PRETTIER_WRITE_OUTPUT"
+  echo -e "prettier: ${GREEN}✓${NC}"
+  exit 0
+fi
+
+# Files need formatting - apply --write
+$PRETTIER_CMD --write $CHANGED_FILES > "$PRETTIER_WRITE_OUTPUT" 2>&1
+WRITE_STATUS=$?
+set -e
+
+if [ $WRITE_STATUS -eq 0 ]; then
+  # Exit 0: success - show what was formatted
+  echo "Prettier formatted the following files:"
+  cat "$PRETTIER_WRITE_OUTPUT"
+  echo ""
+  echo -e "prettier: ${GREEN}✓${NC}"
+  rm "$PRETTIER_CHECK_OUTPUT" "$PRETTIER_WRITE_OUTPUT"
+  exit 0
+else
+  # Exit 2: blocking error - formatting errors
+  # Output to stderr for Claude to see and fix
+  echo "Prettier encountered errors:" >&2
+  cat "$PRETTIER_WRITE_OUTPUT" >&2
+  echo "" >&2
+  echo -e "prettier: ${RED}✗${NC}" >&2
+  rm "$PRETTIER_CHECK_OUTPUT" "$PRETTIER_WRITE_OUTPUT"
+  exit 2
+fi

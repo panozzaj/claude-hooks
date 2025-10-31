@@ -1,0 +1,10 @@
+Inspecting 2 files
+.C
+
+Offenses:
+
+app/models/user.rb:15:7: C: Metrics/MethodLength: Method has too many lines. [12/10]
+  def process_data
+  ^^^^^^^^^^^^^^^ ...
+
+2 files inspected, 1 offense detected, 1 offense not correctable
