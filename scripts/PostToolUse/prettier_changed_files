@@ -4,6 +4,10 @@
 #   - As Claude Code hook: receives JSON via STDIN
 #   - Direct invocation: prettier_changed_files [-v|--verbose] [file1 file2 ...]
 #
+# Provides informative feedback by showing a unified diff of formatting changes.
+# Uses Prettier's stdout output (default behavior) to compare against originals,
+# following the design principle that auto-fix scripts should show what was corrected.
+#
 # See ../../docs/hook_interface.md for interface specification and exit code behavior
 
 set -e
@@ -78,44 +82,80 @@ if [ "$VERBOSE" = true ]; then
 fi
 
 # Run Prettier with auto-format
-# First check what needs formatting to provide detailed feedback
-PRETTIER_CHECK_OUTPUT=$(mktemp)
-PRETTIER_WRITE_OUTPUT=$(mktemp)
+# Use prettier's built-in stdout output to generate diffs
+PRETTIER_OUTPUT=$(mktemp)
 
 # Use 'set +e' temporarily to capture exit status without script failing
 set +e
 
-# Run --check first to see what needs formatting (exit 1 if formatting needed)
-$PRETTIER_CMD --check $CHANGED_FILES > "$PRETTIER_CHECK_OUTPUT" 2>&1
-CHECK_STATUS=$?
+# Run prettier without --write to get formatted output on stdout
+# This allows us to diff against original before making changes
+$PRETTIER_CMD $CHANGED_FILES > "$PRETTIER_OUTPUT" 2>&1
+PRETTIER_STATUS=$?
 
-if [ $CHECK_STATUS -eq 0 ]; then
-  # No formatting needed
-  rm "$PRETTIER_CHECK_OUTPUT" "$PRETTIER_WRITE_OUTPUT"
+if [ $PRETTIER_STATUS -ne 0 ]; then
+  # Exit 2: blocking error - syntax errors prevent formatting
+  echo "Prettier encountered errors:" >&2
+  cat "$PRETTIER_OUTPUT" >&2
+  echo "" >&2
+  echo -e "prettier: ${RED}✗${NC}" >&2
+  rm "$PRETTIER_OUTPUT"
+  exit 2
+fi
+
+# Compare formatted output with original file to detect changes
+CHANGES_DETECTED=false
+DIFF_OUTPUT=""
+
+for file in $CHANGED_FILES; do
+  if [ -f "$file" ]; then
+    # Get formatted version for this file
+    FORMATTED=$(mktemp)
+    $PRETTIER_CMD "$file" > "$FORMATTED" 2>&1
+
+    # Check if file would change
+    if ! diff -q "$file" "$FORMATTED" > /dev/null 2>&1; then
+      CHANGES_DETECTED=true
+      # Store the diff for this file
+      FILE_DIFF=$(diff -u "$file" "$FORMATTED" | tail -n +3 || true)
+      DIFF_OUTPUT="${DIFF_OUTPUT}Changes in $file:\n${FILE_DIFF}\n\n"
+    fi
+
+    rm "$FORMATTED"
+  fi
+done
+
+if [ "$CHANGES_DETECTED" = false ]; then
+  # No formatting changes needed
+  rm "$PRETTIER_OUTPUT"
   echo -e "prettier: ${GREEN}✓${NC}"
   exit 0
 fi
 
-# Files need formatting - apply --write
-$PRETTIER_CMD --write $CHANGED_FILES > "$PRETTIER_WRITE_OUTPUT" 2>&1
+# Apply formatting with --write
+WRITE_OUTPUT=$(mktemp)
+$PRETTIER_CMD --write $CHANGED_FILES > "$WRITE_OUTPUT" 2>&1
 WRITE_STATUS=$?
 set -e
 
 if [ $WRITE_STATUS -eq 0 ]; then
   # Exit 0: success - show what was formatted
   echo "Prettier formatted the following files:"
-  cat "$PRETTIER_WRITE_OUTPUT"
+  cat "$WRITE_OUTPUT"
   echo ""
+
+  # Show the diffs
+  echo -e "$DIFF_OUTPUT"
+
   echo -e "prettier: ${GREEN}✓${NC}"
-  rm "$PRETTIER_CHECK_OUTPUT" "$PRETTIER_WRITE_OUTPUT"
+  rm "$PRETTIER_OUTPUT" "$WRITE_OUTPUT"
   exit 0
 else
-  # Exit 2: blocking error - formatting errors
-  # Output to stderr for Claude to see and fix
+  # Exit 2: blocking error - write failed
   echo "Prettier encountered errors:" >&2
-  cat "$PRETTIER_WRITE_OUTPUT" >&2
+  cat "$WRITE_OUTPUT" >&2
   echo "" >&2
   echo -e "prettier: ${RED}✗${NC}" >&2
-  rm "$PRETTIER_CHECK_OUTPUT" "$PRETTIER_WRITE_OUTPUT"
+  rm "$PRETTIER_OUTPUT" "$WRITE_OUTPUT"
   exit 2
 fi

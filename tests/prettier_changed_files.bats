@@ -18,19 +18,50 @@ teardown() {
   teardown_test_repo
 }
 
-# Helper to create a mock prettier
+# Helper to create a mock prettier that simulates real prettier behavior
+# Args: $1 = exit_code, $2 = should_format (true/false)
 create_prettier_mock() {
   local exit_code=$1
-  local output_file=$2
+  local should_format=$2
 
-  # Create the actual prettier mock
-  cat > "$MOCK_DIR/bin/prettier" << EOF
+  # Create the actual prettier mock that simulates prettier's behavior
+  cat > "$MOCK_DIR/bin/prettier" << 'EOF'
 #!/bin/bash
-if [ -n "$output_file" ] && [ -f "$output_file" ]; then
-  cat "$output_file"
+# Simulate prettier behavior:
+# - Without --write: output formatted content to stdout
+# - With --write: modify file in place, output "file.js Xms"
+
+if [[ "$*" =~ "--write" ]]; then
+  # --write mode: modify files and output summary
+  for file in "$@"; do
+    if [[ "$file" != "--write" && -f "$file" ]]; then
+      if [ "$SHOULD_FORMAT" = "true" ]; then
+        # Simulate formatting by adding spaces
+        sed -i.bak "s/console\.log('\([^']*\)');/console.log( '\1' );/" "$file" 2>/dev/null || true
+      fi
+      echo "$file 15ms"
+    fi
+  done
+else
+  # Default mode: output formatted content to stdout
+  for file in "$@"; do
+    if [ -f "$file" ]; then
+      if [ "$SHOULD_FORMAT" = "true" ]; then
+        # Output formatted version
+        sed "s/console\.log('\([^']*\)');/console.log( '\1' );/" "$file"
+      else
+        # Output unchanged (file is already formatted)
+        cat "$file"
+      fi
+    fi
+  done
 fi
-exit $exit_code
+exit $EXIT_CODE
 EOF
+
+  # Pass variables to the mock
+  sed -i.bak "s/\$SHOULD_FORMAT/$should_format/" "$MOCK_DIR/bin/prettier"
+  sed -i.bak "s/\$EXIT_CODE/$exit_code/" "$MOCK_DIR/bin/prettier"
   chmod +x "$MOCK_DIR/bin/prettier"
 
   # Also mock yarn since the script prefers "yarn prettier"
@@ -56,12 +87,12 @@ EOF
 }
 
 @test "shows only green check when no formatting changes needed" {
-  # Create formattable file
+  # Create already-formatted file
   mkdir -p app
   echo "console.log('test');" > "app.js"
 
-  # Mock prettier to return success with no output (no files formatted)
-  create_prettier_mock 0 "$HOME/.claude/scripts/tests/fixtures/prettier_success_no_changes.txt"
+  # Mock prettier to return success with no formatting needed (exit 0, should_format=false)
+  create_prettier_mock 0 false
 
   run "$SCRIPT_PATH" app.js
 
@@ -73,19 +104,21 @@ EOF
 }
 
 @test "shows output and green check when files formatted" {
-  # Create file
+  # Create file with unformatted content
   echo "console.log('test');" > "app.js"
 
-  # Mock prettier to return success with formatted file list
-  create_prettier_mock 0 "$HOME/.claude/scripts/tests/fixtures/prettier_success_with_formatting.txt"
+  # Mock prettier with formatting needed (exit 0, should_format=true)
+  create_prettier_mock 0 true
 
   run "$SCRIPT_PATH" app.js
 
   [ "$status" -eq 0 ]
 
-  # Should show the output since formatting was done
+  # Should show the formatted files output and the diff
   output_stripped=$(echo "$output" | strip_colors)
-  [[ "$output_stripped" =~ "user_controller.js" ]]
+  [[ "$output_stripped" =~ "Prettier formatted" ]]
+  [[ "$output_stripped" =~ "app.js" ]]
+  [[ "$output_stripped" =~ "Changes in" ]]
   [[ "$output_stripped" =~ "prettier: ✓" ]]
 }
 
@@ -93,8 +126,23 @@ EOF
   # Create file
   echo "console.log('test');" > "app.js"
 
-  # Mock prettier to return failure
-  create_prettier_mock 1 "$HOME/.claude/scripts/tests/fixtures/prettier_failure.txt"
+  # Mock prettier to return failure with syntax error
+  cat > "$MOCK_DIR/bin/prettier" << 'EOF'
+#!/bin/bash
+echo "[error] app.js: SyntaxError: Unexpected token (1:5)" >&2
+exit 1
+EOF
+  chmod +x "$MOCK_DIR/bin/prettier"
+
+  # Mock yarn
+  cat > "$MOCK_DIR/yarn" << 'EOF'
+#!/bin/bash
+if [ "$1" = "prettier" ]; then
+  shift
+  exec prettier "$@"
+fi
+EOF
+  chmod +x "$MOCK_DIR/yarn"
 
   run "$SCRIPT_PATH" app.js
 
@@ -110,8 +158,8 @@ EOF
   # Create file
   echo "console.log('test');" > "app.js"
 
-  # Mock prettier to return success
-  create_prettier_mock 0 "$HOME/.claude/scripts/tests/fixtures/prettier_success_no_changes.txt"
+  # Mock prettier to return success (no formatting needed)
+  create_prettier_mock 0 false
 
   run "$SCRIPT_PATH" --verbose app.js
 
@@ -127,8 +175,8 @@ EOF
   echo "console.log('user');" > "user.js"
   echo "body { margin: 0; }" > "style.css"
 
-  # Mock prettier to return success
-  create_prettier_mock 0 "$HOME/.claude/scripts/tests/fixtures/prettier_success_no_changes.txt"
+  # Mock prettier to return success (no formatting needed)
+  create_prettier_mock 0 false
 
   run "$SCRIPT_PATH" user.js style.css
 
@@ -142,11 +190,18 @@ EOF
   # Create file
   echo "console.log('test');" > "app.js"
 
-  # Create a mock that records arguments
+  # Create a mock that records arguments and simulates formatting
   cat > "$MOCK_DIR/bin/prettier" << 'EOF'
 #!/bin/bash
-echo "prettier called with: $@" > /tmp/prettier_args.txt
-exit 0
+if [[ "$*" =~ "--write" ]]; then
+  echo "prettier called with: $@" > /tmp/prettier_args.txt
+  echo "app.js 15ms"
+  exit 0
+else
+  # Output formatted version (different from original)
+  echo "console.log( 'test' );"
+  exit 0
+fi
 EOF
   chmod +x "$MOCK_DIR/bin/prettier"
 
@@ -180,8 +235,8 @@ EOF
   echo "key: value" > "config.yml"
   echo "# Title" > "README.md"
 
-  # Mock prettier
-  create_prettier_mock 0 "$HOME/.claude/scripts/tests/fixtures/prettier_success_no_changes.txt"
+  # Mock prettier (no formatting needed)
+  create_prettier_mock 0 false
 
   run "$SCRIPT_PATH" app.js styles.css config.json config.yml README.md
 
