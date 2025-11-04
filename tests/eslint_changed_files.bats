@@ -36,6 +36,10 @@ EOF
   # Also mock yarn since the script prefers "yarn eslint"
   cat > "$MOCK_DIR/yarn" << 'EOF'
 #!/bin/bash
+# Handle yarn --silent eslint
+if [ "$1" = "--silent" ]; then
+  shift
+fi
 # If called with "eslint", just pass through to our mock eslint
 if [ "$1" = "eslint" ]; then
   shift
@@ -157,6 +161,9 @@ EOF
   # Also need to mock yarn
   cat > "$MOCK_DIR/yarn" << 'EOF'
 #!/bin/bash
+if [ "$1" = "--silent" ]; then
+  shift
+fi
 if [ "$1" = "eslint" ]; then
   shift
   exec eslint "$@"

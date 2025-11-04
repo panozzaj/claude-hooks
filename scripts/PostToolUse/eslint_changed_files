@@ -64,9 +64,9 @@ fi
 if [ -x "./bin/eslint" ]; then
   ESLINT_CMD="./bin/eslint"
 elif command -v yarn &> /dev/null; then
-  ESLINT_CMD="yarn eslint"
+  ESLINT_CMD="yarn --silent eslint"
 else
-  ESLINT_CMD="npx eslint"
+  ESLINT_CMD="npx --silent eslint"
 fi
 
 if [ "$VERBOSE" = true ]; then
@@ -87,12 +87,22 @@ $ESLINT_CMD --fix $CHANGED_FILES > "$ESLINT_OUTPUT" 2>&1
 ESLINT_STATUS=$?
 set -e
 
+# Filter out yarn/npx wrapper noise from output
+filter_yarn_noise() {
+  grep -v "^yarn run" | \
+  grep -v "^\\$" | \
+  grep -v "^error Command failed" | \
+  grep -v "^info Visit" | \
+  grep -v "^Done in" | \
+  sed '/^$/N;/^\n$/D'  # Remove excessive blank lines
+}
+
 if [ $ESLINT_STATUS -eq 0 ]; then
   # Exit 0: success (with or without auto-corrections)
   # Check if there was any output (issues found and fixed, or warnings)
   if [ -s "$ESLINT_OUTPUT" ]; then
-    # Show what was found/fixed for LLM feedback
-    cat "$ESLINT_OUTPUT"
+    # Show what was found/fixed for LLM feedback (filter noise)
+    cat "$ESLINT_OUTPUT" | filter_yarn_noise
     echo ""
     echo -e "eslint: ${GREEN}✓${NC}"
   else
@@ -103,8 +113,8 @@ if [ $ESLINT_STATUS -eq 0 ]; then
   exit 0
 else
   # Exit 2: blocking error - unfixable issues
-  # Output to stderr for Claude to see and fix
-  cat "$ESLINT_OUTPUT" >&2
+  # Output to stderr for Claude to see and fix (filter noise)
+  cat "$ESLINT_OUTPUT" | filter_yarn_noise >&2
   echo "" >&2
   echo -e "eslint: ${RED}✗${NC}" >&2
   rm "$ESLINT_OUTPUT"
