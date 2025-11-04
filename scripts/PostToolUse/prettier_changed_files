@@ -68,9 +68,9 @@ fi
 if [ -x "./bin/prettier" ]; then
   PRETTIER_CMD="./bin/prettier"
 elif command -v yarn &> /dev/null; then
-  PRETTIER_CMD="yarn prettier"
+  PRETTIER_CMD="yarn --silent prettier"
 else
-  PRETTIER_CMD="npx prettier"
+  PRETTIER_CMD="npx --silent prettier"
 fi
 
 if [ "$VERBOSE" = true ]; then
@@ -109,16 +109,16 @@ DIFF_OUTPUT=""
 
 for file in $CHANGED_FILES; do
   if [ -f "$file" ]; then
-    # Get formatted version for this file
+    # Get formatted version for this file (capture only stdout, discard stderr noise)
     FORMATTED=$(mktemp)
-    $PRETTIER_CMD "$file" > "$FORMATTED" 2>&1
+    $PRETTIER_CMD "$file" > "$FORMATTED" 2>/dev/null
 
     # Check if file would change
     if ! diff -q "$file" "$FORMATTED" > /dev/null 2>&1; then
       CHANGES_DETECTED=true
-      # Store the diff for this file
-      FILE_DIFF=$(diff -u "$file" "$FORMATTED" | tail -n +3 || true)
-      DIFF_OUTPUT="${DIFF_OUTPUT}Changes in $file:\n${FILE_DIFF}\n\n"
+      # Store the diff for this file with minimal context (-U1 = 1 line instead of 3)
+      FILE_DIFF=$(diff -U1 "$file" "$FORMATTED" | tail -n +3 || true)
+      DIFF_OUTPUT="${DIFF_OUTPUT}${file}\n${FILE_DIFF}\n\n"
     fi
 
     rm "$FORMATTED"
@@ -140,8 +140,7 @@ set -e
 
 if [ $WRITE_STATUS -eq 0 ]; then
   # Exit 0: success - show what was formatted
-  echo "Prettier formatted the following files:"
-  cat "$WRITE_OUTPUT"
+  echo "Prettier reformatted:"
   echo ""
 
   # Show the diffs

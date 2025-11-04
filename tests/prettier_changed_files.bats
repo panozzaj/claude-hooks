@@ -67,6 +67,10 @@ EOF
   # Also mock yarn since the script prefers "yarn prettier"
   cat > "$MOCK_DIR/yarn" << 'EOF'
 #!/bin/bash
+# Handle yarn --silent prettier
+if [ "$1" = "--silent" ]; then
+  shift
+fi
 # If called with "prettier", just pass through to our mock prettier
 if [ "$1" = "prettier" ]; then
   shift
@@ -116,9 +120,8 @@ EOF
 
   # Should show the formatted files output and the diff
   output_stripped=$(echo "$output" | strip_colors)
-  [[ "$output_stripped" =~ "Prettier formatted" ]]
+  [[ "$output_stripped" =~ "Prettier reformatted" ]]
   [[ "$output_stripped" =~ "app.js" ]]
-  [[ "$output_stripped" =~ "Changes in" ]]
   [[ "$output_stripped" =~ "prettier: ✓" ]]
 }
 
@@ -137,6 +140,9 @@ EOF
   # Mock yarn
   cat > "$MOCK_DIR/yarn" << 'EOF'
 #!/bin/bash
+if [ "$1" = "--silent" ]; then
+  shift
+fi
 if [ "$1" = "prettier" ]; then
   shift
   exec prettier "$@"
@@ -208,6 +214,9 @@ EOF
   # Also need to mock yarn
   cat > "$MOCK_DIR/yarn" << 'EOF'
 #!/bin/bash
+if [ "$1" = "--silent" ]; then
+  shift
+fi
 if [ "$1" = "prettier" ]; then
   shift
   exec prettier "$@"
