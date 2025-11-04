@@ -22,10 +22,12 @@ All scripts should strive to:
 
 ## Directory Structure
 
+This is a local development repository. Hook scripts are in the `scripts/` directory.
+
 ```
-~/.claude/scripts/
-├── README.md                           # This file
-├── CLAUDE.md                           # Instructions for Claude
+claude-hooks/                           # This repository (local dev)
+├── README.md                           # Main documentation
+├── CLAUDE.md                           # This file - instructions for Claude
 ├── docs/                               # Documentation
 │   ├── hook_interface.md               # Hook interface specification
 │   └── output_examples.md              # Visual output examples
@@ -47,6 +49,8 @@ All scripts should strive to:
     ├── *.bats                          # Test files
     └── fixtures/                       # Test data
 ```
+
+Users reference these scripts with absolute paths in their Claude Code settings (e.g., `.claude/settings.local.json`).
 
 ## Testing
 
