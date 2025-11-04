@@ -22,13 +22,28 @@ if ! command -v bats &> /dev/null; then
   exit 1
 fi
 
-# Run all tests (*.bats files in current directory)
-if bats *.bats; then
-  echo ""
-  echo -e "${GREEN}✓ All tests passed!${NC}"
-  exit 0
+# Run tests
+# If arguments provided, run those specific files, otherwise run all *.bats
+if [ $# -gt 0 ]; then
+  # Run specific test files passed as arguments
+  if bats "$@"; then
+    echo ""
+    echo -e "${GREEN}✓ All tests passed!${NC}"
+    exit 0
+  else
+    echo ""
+    echo -e "${RED}✗ Some tests failed${NC}"
+    exit 1
+  fi
 else
-  echo ""
-  echo -e "${RED}✗ Some tests failed${NC}"
-  exit 1
+  # Run all *.bats files in current directory
+  if bats *.bats; then
+    echo ""
+    echo -e "${GREEN}✓ All tests passed!${NC}"
+    exit 0
+  else
+    echo ""
+    echo -e "${RED}✗ Some tests failed${NC}"
+    exit 1
+  fi
 fi
