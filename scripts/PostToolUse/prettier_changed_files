@@ -53,7 +53,7 @@ else
     fi
 
     # Only check files prettier handles (js, jsx, ts, tsx, json, css, scss, md, etc.)
-    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.(js|jsx|ts|tsx|json|css|scss|less|md|html|yml|yaml)$ ]]; then
+    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.(js|jsx|ts|tsx|json|css|scss|less|md|markdown|html|yml|yaml)$ ]]; then
       CHANGED_FILES="$FILE_PATH"
     fi
   fi
