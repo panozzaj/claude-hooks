@@ -74,11 +74,9 @@ if [ -z "$CHANGED_FILES" ]; then
   exit 0
 fi
 
-# Determine Prettier command
-if [ -x "./bin/prettier" ]; then
-  PRETTIER_CMD="./bin/prettier"
-elif command -v yarn &> /dev/null; then
-  PRETTIER_CMD="yarn --silent prettier"
+# Determine Prettier command - prefer node_modules/.bin over ./bin wrappers (which add noise)
+if [ -f "node_modules/.bin/prettier" ]; then
+  PRETTIER_CMD="./node_modules/.bin/prettier"
 else
   PRETTIER_CMD="npx --silent prettier"
 fi

@@ -70,9 +70,9 @@ if [ -z "$CHANGED_FILES" ]; then
   exit 0
 fi
 
-# Determine ESLint command
-if [ -x "./bin/eslint" ]; then
-  ESLINT_CMD="./bin/eslint"
+# Determine ESLint command - prefer node_modules/.bin over ./bin wrappers (which add noise)
+if [ -f "node_modules/.bin/eslint" ]; then
+  ESLINT_CMD="./node_modules/.bin/eslint"
 elif command -v yarn &> /dev/null; then
   ESLINT_CMD="yarn --silent eslint"
 else

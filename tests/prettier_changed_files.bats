@@ -8,10 +8,10 @@ setup() {
   # Store path to the script being tested
   SCRIPT_PATH="$SCRIPTS_DIR/prettier_changed_files"
 
-  # Create mock prettier command
-  MOCK_DIR="$TEST_REPO/.mocks"
-  mkdir -p "$MOCK_DIR/bin"
-  export PATH="$MOCK_DIR/bin:$MOCK_DIR:$PATH"
+  # Create mock prettier command in node_modules/.bin (where the script looks first)
+  MOCK_DIR="$TEST_REPO/node_modules/.bin"
+  mkdir -p "$MOCK_DIR"
+  export PATH="$MOCK_DIR:$PATH"
 }
 
 teardown() {
@@ -25,7 +25,7 @@ create_prettier_mock() {
   local should_format=$2
 
   # Create the actual prettier mock that simulates prettier's behavior
-  cat > "$MOCK_DIR/bin/prettier" << 'EOF'
+  cat > "$MOCK_DIR/prettier" << 'EOF'
 #!/bin/bash
 # Simulate prettier behavior:
 # - Without --write: output formatted content to stdout
@@ -60,24 +60,9 @@ exit $EXIT_CODE
 EOF
 
   # Pass variables to the mock
-  sed -i.bak "s/\$SHOULD_FORMAT/$should_format/" "$MOCK_DIR/bin/prettier"
-  sed -i.bak "s/\$EXIT_CODE/$exit_code/" "$MOCK_DIR/bin/prettier"
-  chmod +x "$MOCK_DIR/bin/prettier"
-
-  # Also mock yarn since the script prefers "yarn prettier"
-  cat > "$MOCK_DIR/yarn" << 'EOF'
-#!/bin/bash
-# Handle yarn --silent prettier
-if [ "$1" = "--silent" ]; then
-  shift
-fi
-# If called with "prettier", just pass through to our mock prettier
-if [ "$1" = "prettier" ]; then
-  shift
-  exec prettier "$@"
-fi
-EOF
-  chmod +x "$MOCK_DIR/yarn"
+  sed -i.bak "s/\$SHOULD_FORMAT/$should_format/" "$MOCK_DIR/prettier"
+  sed -i.bak "s/\$EXIT_CODE/$exit_code/" "$MOCK_DIR/prettier"
+  chmod +x "$MOCK_DIR/prettier"
 }
 
 @test "shows N/A when called with no file arguments" {
@@ -130,25 +115,12 @@ EOF
   echo "console.log('test');" > "app.js"
 
   # Mock prettier to return failure with syntax error
-  cat > "$MOCK_DIR/bin/prettier" << 'EOF'
+  cat > "$MOCK_DIR/prettier" << 'EOF'
 #!/bin/bash
 echo "[error] app.js: SyntaxError: Unexpected token (1:5)" >&2
 exit 1
 EOF
-  chmod +x "$MOCK_DIR/bin/prettier"
-
-  # Mock yarn
-  cat > "$MOCK_DIR/yarn" << 'EOF'
-#!/bin/bash
-if [ "$1" = "--silent" ]; then
-  shift
-fi
-if [ "$1" = "prettier" ]; then
-  shift
-  exec prettier "$@"
-fi
-EOF
-  chmod +x "$MOCK_DIR/yarn"
+  chmod +x "$MOCK_DIR/prettier"
 
   run "$SCRIPT_PATH" app.js
 
@@ -197,7 +169,7 @@ EOF
   echo "console.log('test');" > "app.js"
 
   # Create a mock that records arguments and simulates formatting
-  cat > "$MOCK_DIR/bin/prettier" << 'EOF'
+  cat > "$MOCK_DIR/prettier" << 'EOF'
 #!/bin/bash
 if [[ "$*" =~ "--write" ]]; then
   echo "prettier called with: $@" > /tmp/prettier_args.txt
@@ -209,20 +181,7 @@ else
   exit 0
 fi
 EOF
-  chmod +x "$MOCK_DIR/bin/prettier"
-
-  # Also need to mock yarn
-  cat > "$MOCK_DIR/yarn" << 'EOF'
-#!/bin/bash
-if [ "$1" = "--silent" ]; then
-  shift
-fi
-if [ "$1" = "prettier" ]; then
-  shift
-  exec prettier "$@"
-fi
-EOF
-  chmod +x "$MOCK_DIR/yarn"
+  chmod +x "$MOCK_DIR/prettier"
 
   run "$SCRIPT_PATH" app.js
 

@@ -8,10 +8,10 @@ setup() {
   # Store path to the script being tested
   SCRIPT_PATH="$SCRIPTS_DIR/eslint_changed_files"
 
-  # Create mock eslint command
-  MOCK_DIR="$TEST_REPO/.mocks"
-  mkdir -p "$MOCK_DIR/bin"
-  export PATH="$MOCK_DIR/bin:$MOCK_DIR:$PATH"
+  # Create mock eslint command in node_modules/.bin (where the script looks first)
+  MOCK_DIR="$TEST_REPO/node_modules/.bin"
+  mkdir -p "$MOCK_DIR"
+  export PATH="$MOCK_DIR:$PATH"
 }
 
 teardown() {
@@ -23,30 +23,15 @@ create_eslint_mock() {
   local exit_code=$1
   local output_file=$2
 
-  # Create the actual eslint mock
-  cat > "$MOCK_DIR/bin/eslint" << EOF
+  # Create the actual eslint mock in node_modules/.bin
+  cat > "$MOCK_DIR/eslint" << EOF
 #!/bin/bash
 if [ -n "$output_file" ] && [ -f "$output_file" ]; then
   cat "$output_file"
 fi
 exit $exit_code
 EOF
-  chmod +x "$MOCK_DIR/bin/eslint"
-
-  # Also mock yarn since the script prefers "yarn eslint"
-  cat > "$MOCK_DIR/yarn" << 'EOF'
-#!/bin/bash
-# Handle yarn --silent eslint
-if [ "$1" = "--silent" ]; then
-  shift
-fi
-# If called with "eslint", just pass through to our mock eslint
-if [ "$1" = "eslint" ]; then
-  shift
-  exec eslint "$@"
-fi
-EOF
-  chmod +x "$MOCK_DIR/yarn"
+  chmod +x "$MOCK_DIR/eslint"
 }
 
 @test "shows N/A when called with no file arguments" {
@@ -151,25 +136,12 @@ EOF
   echo "console.log('test');" > "app/javascript/controllers/user_controller.js"
 
   # Create a mock that records arguments
-  cat > "$MOCK_DIR/bin/eslint" << 'EOF'
+  cat > "$MOCK_DIR/eslint" << 'EOF'
 #!/bin/bash
 echo "eslint called with: $@" > /tmp/eslint_args.txt
 exit 0
 EOF
-  chmod +x "$MOCK_DIR/bin/eslint"
-
-  # Also need to mock yarn
-  cat > "$MOCK_DIR/yarn" << 'EOF'
-#!/bin/bash
-if [ "$1" = "--silent" ]; then
-  shift
-fi
-if [ "$1" = "eslint" ]; then
-  shift
-  exec eslint "$@"
-fi
-EOF
-  chmod +x "$MOCK_DIR/yarn"
+  chmod +x "$MOCK_DIR/eslint"
 
   run "$SCRIPT_PATH" app/javascript/controllers/user_controller.js
 
