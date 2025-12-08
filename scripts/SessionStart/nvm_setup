@@ -1,0 +1,30 @@
+#!/bin/bash
+# Script to load nvm and set Node version based on project's .nvmrc
+# This persists nvm environment changes to CLAUDE_ENV_FILE so subsequent
+# bash commands (including PostToolUse hooks like eslint) use the correct Node version.
+
+# Load nvm
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  source "$NVM_DIR/nvm.sh"
+
+  # If project has .nvmrc, use that version
+  if [ -f ".nvmrc" ]; then
+    nvm use --silent 2>/dev/null || true
+  fi
+fi
+
+# Persist key environment variables to CLAUDE_ENV_FILE
+if [ -n "$CLAUDE_ENV_FILE" ]; then
+  # Export PATH (which now includes the correct nvm node version)
+  echo "export PATH=\"$PATH\"" >> "$CLAUDE_ENV_FILE"
+  # Export NVM_DIR and related vars
+  echo "export NVM_DIR=\"$NVM_DIR\"" >> "$CLAUDE_ENV_FILE"
+  echo "export NVM_BIN=\"$NVM_BIN\"" >> "$CLAUDE_ENV_FILE"
+  echo "export NVM_INC=\"$NVM_INC\"" >> "$CLAUDE_ENV_FILE"
+fi
+
+# Print confirmation (shows Node version being used)
+node --version 2>/dev/null | sed 's/^/nvm: Node /' || echo "nvm: Node not found"
+
+exit 0

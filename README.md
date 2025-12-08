@@ -17,6 +17,8 @@ I had the following design principles:
 
 ## Scripts
 
+### PostToolUse
+
 All PostToolUse hook scripts are in the `scripts/PostToolUse/` directory:
 
 - **rubocop_changed_files** - RuboCop with auto-correction
@@ -24,6 +26,12 @@ All PostToolUse hook scripts are in the `scripts/PostToolUse/` directory:
 - **eslint_changed_files** - ESLint with auto-fix
 - **prettier_changed_files** - Prettier formatting
 - **stylelint_changed_files** - Stylelint with auto-fix
+
+### SessionStart
+
+SessionStart hook scripts are in the `scripts/SessionStart/` directory:
+
+- **nvm_setup** - Load nvm and set Node version from `.nvmrc`
 
 ## Using
 
@@ -52,6 +60,45 @@ To use in your project, add the following to your Claude Code configuration:
 ```
 
 This should go in `./claude/settings.local.json` (see below for possible hook locations).
+
+### SessionStart Hooks
+
+SessionStart hooks run once when Claude Code starts a session. They're useful for setting up the environment:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/path/to/claude-hooks/scripts/SessionStart/nvm_setup"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+#### Persisting Environment Variables
+
+SessionStart hooks have special support for persisting environment variables via `CLAUDE_ENV_FILE`. Any variables written to this file are automatically sourced in all subsequent bash commands during the session.
+
+This is essential for tools like nvm that modify the environment—without persistence, PostToolUse hooks (like eslint) would use the system Node version instead of the project's `.nvmrc` version.
+
+Example from `nvm_setup`:
+
+```bash
+# Persist key environment variables to CLAUDE_ENV_FILE
+if [ -n "$CLAUDE_ENV_FILE" ]; then
+  echo "export PATH=\"$PATH\"" >> "$CLAUDE_ENV_FILE"
+  echo "export NVM_DIR=\"$NVM_DIR\"" >> "$CLAUDE_ENV_FILE"
+fi
+```
+
+See [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks#persisting-environment-variables) for more details.
 
 Note: you'll have to restart claude code for changes to take effect. Typically I `/exit` and then restart with `claude -c` and state that I restarted.
 
