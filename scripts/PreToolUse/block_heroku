@@ -1,0 +1,34 @@
+#!/bin/bash
+# Block direct heroku CLI usage, suggest safe-heroku instead
+#
+# Usage: As Claude Code PreToolUse hook for Bash tool
+#
+# Receives JSON via STDIN with:
+#   tool_name: "Bash"
+#   tool_input: {"command": "..."}
+
+# Read JSON from stdin
+if [ -t 0 ]; then
+  exit 0
+fi
+INPUT=$(cat)
+
+# Only applies to Bash tool
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+if [[ "$TOOL_NAME" != "Bash" ]]; then
+  exit 0
+fi
+
+# Extract the command
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+if [[ -z "$COMMAND" ]]; then
+  exit 0
+fi
+
+# Check if command starts with "heroku" (word boundary)
+if [[ "$COMMAND" =~ ^heroku($|[[:space:]]) ]]; then
+  echo "ERROR: Use safe-heroku instead of heroku (read-only wrapper)" >&2
+  exit 2
+fi
+
+exit 0
