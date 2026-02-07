@@ -1,0 +1,68 @@
+#!/bin/bash
+# Add jj_snapshot PreToolUse hook to current directory's .claude/settings.local.json
+# Safe to run multiple times - will merge with existing config
+#
+# Usage: add_jj_snapshot_hook [directory]
+#   directory: optional, defaults to current directory
+
+set -e
+
+DIR="${1:-.}"
+SETTINGS_FILE="$DIR/.claude/settings.local.json"
+HOOK_SCRIPT="$HOME/Documents/dev/claude-hooks/scripts/PreToolUse/jj_snapshot"
+
+# Create .claude directory if needed
+mkdir -p "$DIR/.claude"
+
+# The hook config we want to add
+NEW_HOOK='{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'"$HOOK_SCRIPT"'"
+          }
+        ]
+      }
+    ]
+  }
+}'
+
+if [ -f "$SETTINGS_FILE" ]; then
+  # File exists - merge with existing config
+  if command -v jq &> /dev/null; then
+    # Use jq for proper merging
+    EXISTING=$(cat "$SETTINGS_FILE")
+
+    # Check if PreToolUse hooks already exist
+    if echo "$EXISTING" | jq -e '.hooks.PreToolUse' &> /dev/null; then
+      # Check if jj_snapshot hook already exists
+      if echo "$EXISTING" | jq -e '.hooks.PreToolUse[] | select(.hooks[]?.command | contains("jj_snapshot"))' &> /dev/null; then
+        echo "jj_snapshot hook already configured"
+        exit 0
+      fi
+
+      # Add to existing PreToolUse array
+      echo "$EXISTING" | jq --argjson new "$NEW_HOOK" '
+        .hooks.PreToolUse += $new.hooks.PreToolUse
+      ' > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+    else
+      # Merge hooks object
+      echo "$EXISTING" | jq --argjson new "$NEW_HOOK" '
+        .hooks = (.hooks // {}) * $new.hooks
+      ' > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+    fi
+  else
+    echo "Warning: jq not found, cannot merge with existing config" >&2
+    echo "Please manually add jj_snapshot hook to $SETTINGS_FILE" >&2
+    exit 1
+  fi
+else
+  # No existing file - create new
+  echo "$NEW_HOOK" > "$SETTINGS_FILE"
+fi
+
+echo "Added jj_snapshot hook to $SETTINGS_FILE"

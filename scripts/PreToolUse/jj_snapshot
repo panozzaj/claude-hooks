@@ -1,0 +1,37 @@
+#!/bin/bash
+# Script to snapshot jj working copy before potentially destructive operations
+# This triggers jj's auto-snapshot so changes can be recovered from jj evolog/obslog
+#
+# Usage: As Claude Code PreToolUse hook for Bash, Edit, Write tools
+#
+# Receives JSON via STDIN with cwd field indicating the working directory.
+# Safe to run in non-jj repos (exits silently).
+
+# Read JSON from STDIN to get cwd
+CWD=""
+if [ ! -t 0 ]; then
+  HOOK_JSON=$(cat)
+  CWD=$(echo "$HOOK_JSON" | grep -o '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+fi
+
+# Use cwd from JSON, or fall back to current directory
+if [ -n "$CWD" ]; then
+  cd "$CWD" 2>/dev/null || exit 0
+fi
+
+# Exit silently if jj command doesn't exist
+if ! command -v jj &> /dev/null; then
+  exit 0
+fi
+
+# Exit silently if not in a jj repo (no .jj directory in current or parent dirs)
+# jj repos have a .jj directory at the root
+if ! jj root &> /dev/null; then
+  exit 0
+fi
+
+# Run jj status to trigger a snapshot of the working copy
+# This is silent - we just want the side effect of snapshotting
+jj status > /dev/null 2>&1
+
+exit 0

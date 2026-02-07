@@ -17,6 +17,12 @@ I had the following design principles:
 
 ## Scripts
 
+### PreToolUse
+
+PreToolUse hook scripts run before tool execution. Located in `scripts/PreToolUse/`:
+
+- **jj_snapshot** - Snapshots jj working copy before Bash/Edit/Write operations for recovery
+
 ### PostToolUse
 
 All PostToolUse hook scripts are in the `scripts/PostToolUse/` directory:
@@ -60,6 +66,30 @@ To use in your project, add the following to your Claude Code configuration:
 ```
 
 This should go in `./claude/settings.local.json` (see below for possible hook locations).
+
+### PreToolUse Hooks
+
+PreToolUse hooks run before tool execution. They're useful for capturing state before potentially destructive operations:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/path/to/claude-hooks/scripts/PreToolUse/jj_snapshot"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The `jj_snapshot` hook triggers a jj snapshot before file changes, allowing recovery via `jj evolog` if something goes wrong. It exits silently if jj isn't installed or the directory isn't a jj repo.
 
 ### SessionStart Hooks
 
