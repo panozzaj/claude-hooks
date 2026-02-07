@@ -1,0 +1,130 @@
+#!/bin/bash
+# Script to run Ruff formatter on changed Python files
+# Usage:
+#   - As Claude Code hook: receives JSON via STDIN
+#   - Direct invocation: ruff_format_changed_files [-v|--verbose] [file1 file2 ...]
+#
+# Uses ruff format to auto-format Python files (replaces Black with faster Rust-based formatter).
+# See ../../docs/hook_interface.md for interface specification and exit code behavior
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+GRAY='\033[0;90m'
+NC='\033[0m' # No Color
+
+# Parse verbose flag
+VERBOSE=false
+FILES_ARG=()
+for arg in "$@"; do
+  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
+    VERBOSE=true
+  else
+    FILES_ARG+=("$arg")
+  fi
+done
+
+# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
+CHANGED_FILES=""
+
+# Check if we have command-line file arguments (for direct invocation / testing)
+if [ ${#FILES_ARG[@]} -gt 0 ]; then
+  CHANGED_FILES="${FILES_ARG[*]}"
+else
+  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
+  if [ ! -t 0 ]; then
+    HOOK_JSON=$(cat)
+
+    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+
+    if [ -z "$FILE_PATH" ]; then
+      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+    fi
+
+    # Only check Python files
+    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.py$ ]]; then
+      CHANGED_FILES="$FILE_PATH"
+    fi
+  fi
+fi
+
+if [ -z "$CHANGED_FILES" ]; then
+  echo -e "ruff-fmt: ${GRAY}N/A${NC}"
+  exit 0
+fi
+
+# Check if file exists
+for file in $CHANGED_FILES; do
+  if [ ! -f "$file" ]; then
+    echo -e "ruff-fmt: ${GRAY}N/A (file not found)${NC}"
+    exit 0
+  fi
+done
+
+# Determine ruff command - prefer uv run, then direct command
+if command -v uv &> /dev/null && [ -f "pyproject.toml" ]; then
+  RUFF_CMD="uv run ruff"
+elif command -v ruff &> /dev/null; then
+  RUFF_CMD="ruff"
+else
+  echo -e "ruff-fmt: ${GRAY}skipped (ruff not found)${NC}"
+  exit 0
+fi
+
+if [ "$VERBOSE" = true ]; then
+  echo "Changed Python files detected:"
+  echo "$CHANGED_FILES" | sed 's/^/  /'
+  echo ""
+  echo "Running Ruff formatter..."
+  echo ""
+fi
+
+# Check what would change first
+DIFF_OUTPUT=""
+CHANGES_DETECTED=false
+
+for file in $CHANGED_FILES; do
+  if [ -f "$file" ]; then
+    FORMATTED=$(mktemp)
+    $RUFF_CMD format --quiet "$file" -o "$FORMATTED" 2>/dev/null || cp "$file" "$FORMATTED"
+
+    if ! diff -q "$file" "$FORMATTED" > /dev/null 2>&1; then
+      CHANGES_DETECTED=true
+      FILE_DIFF=$(diff -U1 "$file" "$FORMATTED" | tail -n +3 || true)
+      DIFF_OUTPUT="${DIFF_OUTPUT}${file}\n${FILE_DIFF}\n\n"
+    fi
+
+    rm "$FORMATTED"
+  fi
+done
+
+if [ "$CHANGES_DETECTED" = false ]; then
+  echo -e "ruff-fmt: ${GREEN}✓${NC}"
+  exit 0
+fi
+
+# Apply formatting
+RUFF_OUTPUT=$(mktemp)
+
+set +e
+$RUFF_CMD format $CHANGED_FILES > "$RUFF_OUTPUT" 2>&1
+RUFF_STATUS=$?
+set -e
+
+if [ $RUFF_STATUS -eq 0 ]; then
+  echo "Ruff reformatted:"
+  echo ""
+  echo -e "$DIFF_OUTPUT"
+  echo -e "ruff-fmt: ${GREEN}✓${NC}"
+  rm "$RUFF_OUTPUT"
+  exit 0
+else
+  cat "$RUFF_OUTPUT" >&2
+  echo "" >&2
+  echo -e "ruff-fmt: ${RED}✗${NC}" >&2
+  rm "$RUFF_OUTPUT"
+  exit 2
+fi
