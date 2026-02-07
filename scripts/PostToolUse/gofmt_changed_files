@@ -1,0 +1,102 @@
+#!/bin/bash
+# Script to run gofmt on changed Go files
+# Usage:
+#   - As Claude Code hook: receives JSON via STDIN
+#   - Direct invocation: gofmt_changed_files [-v|--verbose] [file1 file2 ...]
+#
+# See ../../docs/hook_interface.md for interface specification and exit code behavior
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+GRAY='\033[0;90m'
+NC='\033[0m' # No Color
+
+# Parse verbose flag
+VERBOSE=false
+FILES_ARG=()
+for arg in "$@"; do
+  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
+    VERBOSE=true
+  else
+    FILES_ARG+=("$arg")
+  fi
+done
+
+# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
+CHANGED_FILES=""
+
+# Check if we have command-line file arguments (for direct invocation / testing)
+if [ ${#FILES_ARG[@]} -gt 0 ]; then
+  CHANGED_FILES="${FILES_ARG[*]}"
+else
+  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
+  if [ ! -t 0 ]; then
+    HOOK_JSON=$(cat)
+
+    # Extract file_path from JSON
+    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+
+    if [ -z "$FILE_PATH" ]; then
+      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+    fi
+
+    # Only check Go files
+    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.go$ ]]; then
+      CHANGED_FILES="$FILE_PATH"
+    fi
+  fi
+fi
+
+if [ -z "$CHANGED_FILES" ]; then
+  echo -e "gofmt: ${GRAY}N/A${NC}"
+  exit 0
+fi
+
+# Check if gofmt is available
+if ! command -v gofmt &> /dev/null; then
+  echo -e "gofmt: ${GRAY}N/A (gofmt not found)${NC}"
+  exit 0
+fi
+
+# Verify file exists
+if [ ! -f "$CHANGED_FILES" ]; then
+  echo -e "gofmt: ${GRAY}N/A (file not found)${NC}"
+  exit 0
+fi
+
+if [ "$VERBOSE" = true ]; then
+  echo "Changed Go files detected:"
+  echo "$CHANGED_FILES" | sed 's/^/  /'
+  echo ""
+  echo "Running gofmt..."
+  echo ""
+fi
+
+# Run gofmt -w to format in place
+FMT_OUTPUT=$(mktemp)
+
+set +e
+gofmt -w "$CHANGED_FILES" 2>&1 > "$FMT_OUTPUT"
+FMT_STATUS=$?
+set -e
+
+if [ $FMT_STATUS -eq 0 ]; then
+  if [ -s "$FMT_OUTPUT" ]; then
+    cat "$FMT_OUTPUT"
+    echo ""
+  fi
+  echo -e "gofmt: ${GREEN}✓${NC}"
+  rm "$FMT_OUTPUT"
+  exit 0
+else
+  # Error running gofmt
+  cat "$FMT_OUTPUT" >&2
+  echo "" >&2
+  echo -e "gofmt: ${RED}✗${NC}" >&2
+  rm "$FMT_OUTPUT"
+  exit 2
+fi
