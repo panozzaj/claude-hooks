@@ -1,0 +1,2 @@
+    Checking myproject v0.1.0 (/path/to/project)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.50s

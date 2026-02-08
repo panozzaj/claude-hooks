@@ -1,8 +1,9 @@
 #!/bin/bash
 # Test helper functions for bats tests
 
-# Path to the scripts being tested (relative to tests directory)
+# Paths to the scripts being tested (relative to tests directory)
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../scripts/PostToolUse" && pwd)"
+FIXTURES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/fixtures" && pwd)"
 
 # Create a temporary git repository for testing
 setup_test_repo() {

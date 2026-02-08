@@ -1,0 +1,4 @@
+app/models/user.py:3:1: F401 [*] `os` imported but unused
+app/models/user.py:10:5: E741 Ambiguous variable name: `l`
+Found 2 errors.
+[*] 1 fixable with the `--fix` option.
