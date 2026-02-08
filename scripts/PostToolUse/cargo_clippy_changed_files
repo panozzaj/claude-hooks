@@ -77,7 +77,7 @@ else
   FILE_DIR="."
 fi
 
-CARGO_ROOT=$(find_cargo_root "$(cd "$FILE_DIR" && pwd)")
+CARGO_ROOT=$(find_cargo_root "$(cd "$FILE_DIR" && pwd)" || true)
 
 if [ -z "$CARGO_ROOT" ]; then
   echo -e "clippy: ${GRAY}N/A (no Cargo.toml found)${NC}"
