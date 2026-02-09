@@ -2,11 +2,47 @@
 # Says a message with the project name appended.
 # Usage: echo '{"cwd":"/path/to/project"}' | say_with_project "Claude has a plan"
 # Output: says "Claude has a plan for project"
+#
+# Project name logic (matches colorpath conventions):
+#   $tries/YYYY-MM-DD-name/... -> "name"
+#   $dev/project/...           -> "project"
+#   /any/other/path            -> basename
+
+DEV_DIR="/Users/anthony/Documents/dev"
+TRIES_DIR="$DEV_DIR/tries"
 
 MESSAGE="$1"
 INPUT=$(cat)
 CWD=$(echo "$INPUT" | grep -o '"cwd" *: *"[^"]*"' | sed 's/.*: *"\([^"]*\)"/\1/')
-PROJECT=$(basename "$CWD")
+
+get_project_name() {
+  local cwd="$1"
+
+  # Under $tries: first component after tries dir, strip YYYY-MM-DD- prefix
+  if [[ "$cwd" == "$TRIES_DIR/"* ]]; then
+    local rel="${cwd#$TRIES_DIR/}"
+    local first="${rel%%/*}"
+    echo "$first" | sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}-//'
+    return
+  fi
+
+  # Under $dev: first component after dev dir
+  if [[ "$cwd" == "$DEV_DIR/"* ]]; then
+    local rel="${cwd#$DEV_DIR/}"
+    echo "${rel%%/*}"
+    return
+  fi
+
+  # Fallback: basename
+  basename "$cwd"
+}
+
+PROJECT=$(get_project_name "$CWD")
+
+# Wait for any existing say process to finish so messages don't overlap
+while pgrep -x say > /dev/null 2>&1; do
+  sleep 0.2
+done
 
 if [ -n "$PROJECT" ]; then
   say "$MESSAGE for $PROJECT"
