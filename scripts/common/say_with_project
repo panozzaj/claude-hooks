@@ -1,0 +1,15 @@
+#!/bin/bash
+# Says a message with the project name appended.
+# Usage: echo '{"cwd":"/path/to/project"}' | say_with_project "Claude has a plan"
+# Output: says "Claude has a plan for project"
+
+MESSAGE="$1"
+INPUT=$(cat)
+CWD=$(echo "$INPUT" | grep -o '"cwd" *: *"[^"]*"' | sed 's/.*: *"\([^"]*\)"/\1/')
+PROJECT=$(basename "$CWD")
+
+if [ -n "$PROJECT" ]; then
+  say "$MESSAGE for $PROJECT"
+else
+  say "$MESSAGE"
+fi
