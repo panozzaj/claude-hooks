@@ -1,0 +1,112 @@
+#!/bin/bash
+# Run ShellCheck on changed shell script files
+# Usage:
+#   - As Claude Code hook: receives JSON via STDIN
+#   - Direct invocation: shellcheck_changed_files [-v|--verbose] [file1 file2 ...]
+#
+# See ../../docs/hook_interface.md for interface specification and exit code behavior
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+GRAY='\033[0;90m'
+NC='\033[0m' # No Color
+
+# Parse verbose flag
+VERBOSE=false
+FILES_ARG=()
+for arg in "$@"; do
+  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
+    VERBOSE=true
+  else
+    FILES_ARG+=("$arg")
+  fi
+done
+
+# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
+CHANGED_FILES=""
+
+# Check if we have command-line file arguments (for direct invocation / testing)
+if [ ${#FILES_ARG[@]} -gt 0 ]; then
+  CHANGED_FILES="${FILES_ARG[*]}"
+else
+  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
+  if [ ! -t 0 ]; then
+    HOOK_JSON=$(cat)
+
+    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+
+    if [ -z "$FILE_PATH" ]; then
+      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+    fi
+
+    if [ -n "$FILE_PATH" ]; then
+      CHANGED_FILES="$FILE_PATH"
+    fi
+  fi
+fi
+
+if [ -z "$CHANGED_FILES" ]; then
+  echo -e "shellcheck: ${GRAY}N/A${NC}"
+  exit 0
+fi
+
+# Filter to only shell script files
+SHELL_FILES=()
+for file in $CHANGED_FILES; do
+  # Skip if file doesn't exist
+  [ -f "$file" ] || continue
+
+  # Check by extension
+  if [[ "$file" =~ \.(sh|bash)$ ]]; then
+    SHELL_FILES+=("$file")
+    continue
+  fi
+
+  # Check for shell shebang (bash, sh, zsh)
+  if head -1 "$file" 2>/dev/null | grep -qE '^#!.*\b(bash|sh|zsh)\b'; then
+    SHELL_FILES+=("$file")
+  fi
+done
+
+if [ ${#SHELL_FILES[@]} -eq 0 ]; then
+  echo -e "shellcheck: ${GRAY}N/A${NC}"
+  exit 0
+fi
+
+# Check that shellcheck is available
+if ! command -v shellcheck &> /dev/null; then
+  echo -e "shellcheck: ${GRAY}N/A (not installed)${NC}"
+  exit 0
+fi
+
+if [ "$VERBOSE" = true ]; then
+  echo "Changed shell files detected:"
+  printf '  %s\n' "${SHELL_FILES[@]}"
+  echo ""
+  echo "Running ShellCheck..."
+  echo ""
+fi
+
+# Run ShellCheck
+SHELLCHECK_OUTPUT=$(mktemp)
+
+set +e
+shellcheck "${SHELL_FILES[@]}" > "$SHELLCHECK_OUTPUT" 2>&1
+SHELLCHECK_STATUS=$?
+set -e
+
+if [ $SHELLCHECK_STATUS -eq 0 ]; then
+  echo -e "shellcheck: ${GREEN}✓${NC}"
+  rm "$SHELLCHECK_OUTPUT"
+  exit 0
+else
+  # ShellCheck found issues (exit 1) - these require manual fixes
+  cat "$SHELLCHECK_OUTPUT" >&2
+  echo "" >&2
+  echo -e "shellcheck: ${RED}✗${NC}" >&2
+  rm "$SHELLCHECK_OUTPUT"
+  exit 2
+fi
