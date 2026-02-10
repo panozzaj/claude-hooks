@@ -1,0 +1,92 @@
+#!/bin/bash
+# Stop hook: Checks if build artifacts are stale and prompts Claude to rebuild.
+#
+# Usage in settings:
+#   "command": "/path/to/scripts/Stop/stop_stale_build dist/bundle.js tmp/pids/server.pid"
+#
+# Artifact paths are passed as command-line arguments and resolved relative to cwd.
+# Uses mtime comparison (find -newer) - no LLM needed.
+#
+# Receives JSON on stdin: {session_id, transcript_path, cwd, stop_hook_active, ...}
+# Output {"decision": "block", "reason": "..."} if artifacts are stale.
+# Exit 0 with no output = approve (let Claude stop).
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+COOLDOWN="$SCRIPT_DIR/../common/cooldown"
+HOOK_NAME="stop_stale_build"
+
+# Read JSON from stdin
+if [ -t 0 ]; then
+  exit 0
+fi
+INPUT=$(cat)
+
+# Check stop_hook_active to avoid infinite loops
+STOP_HOOK_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false')
+if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
+  exit 0
+fi
+
+# Extract cwd and cd to it
+CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
+if [ -z "$CWD" ] || [ ! -d "$CWD" ]; then
+  exit 0
+fi
+cd "$CWD"
+
+# Paths to check come from command-line arguments
+if [ $# -eq 0 ]; then
+  exit 0
+fi
+
+STALE=()
+NEWER_EXAMPLES=""
+
+for artifact in "$@"; do
+  # Resolve relative to cwd
+  if [[ "$artifact" != /* ]]; then
+    artifact="$CWD/$artifact"
+  fi
+
+  if [ ! -e "$artifact" ]; then
+    STALE+=("$(basename "$artifact") (not found)")
+    continue
+  fi
+
+  # Find source files newer than this artifact, excluding common non-source dirs
+  NEWER=$(find . -newer "$artifact" \
+    -not -path './.git/*' \
+    -not -path './node_modules/*' \
+    -not -path './tmp/*' \
+    -not -path './.playwright-mcp/*' \
+    -not -path './dist/*' \
+    -not -path './build/*' \
+    -not -path './.next/*' \
+    -not -path './target/*' \
+    -type f 2>/dev/null | head -5)
+
+  if [ -n "$NEWER" ]; then
+    STALE+=("$(basename "$artifact")")
+    if [ -z "$NEWER_EXAMPLES" ]; then
+      NEWER_EXAMPLES=$(echo "$NEWER" | sed 's|^\./||' | head -3 | paste -sd', ' -)
+    fi
+  fi
+done
+
+if [ ${#STALE[@]} -eq 0 ]; then
+  exit 0
+fi
+
+# Check cooldown before blocking
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
+"$COOLDOWN" check "$SESSION_ID" "$HOOK_NAME" || exit 0
+
+STALE_LIST=$(printf '%s, ' "${STALE[@]}")
+STALE_LIST="${STALE_LIST%, }"
+
+REASON="Build artifacts appear stale: ${STALE_LIST}. Source files modified since last build (e.g. ${NEWER_EXAMPLES}). Please rebuild."
+jq -n --arg reason "$REASON" '{"decision": "block", "reason": $reason}'
+"$COOLDOWN" record "$SESSION_ID" "$HOOK_NAME"
+exit 0
