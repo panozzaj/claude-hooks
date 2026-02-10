@@ -1,7 +1,7 @@
 #!/bin/bash
 # Says a message with the project name appended.
-# Usage: echo '{"cwd":"/path/to/project"}' | say_with_project "Claude has a plan"
-# Output: says "Claude has a plan for project"
+# Usage: echo '{"cwd":"/path/to/project"}' | say_with_project "check"
+# Output: says "check project"
 #
 # Project name logic (matches colorpath conventions):
 #   $tries/YYYY-MM-DD-name/... -> "name"
@@ -45,7 +45,7 @@ while pgrep -x say > /dev/null 2>&1; do
 done
 
 if [ -n "$PROJECT" ]; then
-  say "$MESSAGE for $PROJECT"
+  say "$MESSAGE $PROJECT"
 else
   say "$MESSAGE"
 fi
