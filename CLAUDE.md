@@ -41,9 +41,11 @@ claude-hooks/                           # This repository (local dev)
 │   │   └── typescript_check_changed_files
 │   ├── Stop/                           # Stop hook scripts
 │   │   ├── stop_diy_check             # Blocks when Claude tells user to DIY
-│   │   └── stop_auto_commit           # Blocks when git has uncommitted changes
+│   │   ├── stop_auto_commit           # Blocks when git has uncommitted changes
+│   │   └── stop_stale_build           # Blocks when build artifacts are stale
 │   ├── common/                         # Shared helpers
-│   │   └── llm_classify               # YES/NO classification via local LLM
+│   │   ├── llm_classify               # YES/NO classification via local LLM
+│   │   └── cooldown                   # Per-session cooldown to prevent repeat blocks
 │   └── debug/                          # Debug utilities
 │       ├── log_hook_params
 │       └── log_tool_name

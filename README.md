@@ -39,8 +39,9 @@ Stop hook scripts fire after Claude finishes responding. They can block Claude f
 
 - **stop_diy_check** - Detects when Claude tells the user to do something the agent could do itself (run commands, restart servers, etc.) and blocks, asking Claude to do it instead
 - **stop_auto_commit** - Detects uncommitted git changes that look ready to commit and blocks, asking Claude to review and commit them
+- **stop_stale_build** - Checks if build artifacts are stale (source files newer than artifact mtime) and blocks, asking Claude to rebuild. Takes artifact path(s) as command-line arguments. No LLM needed - pure timestamp comparison.
 
-Both hooks use a local LLM (via `llm` CLI backed by ollama) for classification and degrade gracefully if the LLM is unavailable.
+`stop_diy_check` and `stop_auto_commit` use a local LLM (via `llm` CLI backed by ollama) for classification and degrade gracefully if the LLM is unavailable. `stop_stale_build` uses only `find -newer` and has no dependencies beyond `jq`.
 
 ### Shared Helpers
 
@@ -121,6 +122,10 @@ Stop hooks fire after Claude finishes responding. They can block Claude from sto
           {
             "type": "command",
             "command": "/path/to/claude-hooks/scripts/Stop/stop_auto_commit"
+          },
+          {
+            "type": "command",
+            "command": "/path/to/claude-hooks/scripts/Stop/stop_stale_build dist/bundle.js tmp/pids/server.pid"
           }
         ]
       }
@@ -129,11 +134,11 @@ Stop hooks fire after Claude finishes responding. They can block Claude from sto
 }
 ```
 
-**Prerequisites:** These hooks require `jq`, the `llm` CLI tool, and an ollama model (default: `gemma3:4b`). Install with:
+**Prerequisites:** `stop_diy_check` and `stop_auto_commit` require `jq`, the `llm` CLI tool, and an ollama model (default: `gemma3:4b`). `stop_stale_build` requires only `jq`. Install with:
 ```bash
 brew install jq
-pip install llm
-ollama pull gemma3:4b
+pip install llm          # for stop_diy_check, stop_auto_commit
+ollama pull gemma3:4b    # for stop_diy_check, stop_auto_commit
 ```
 
 ### SessionStart Hooks
