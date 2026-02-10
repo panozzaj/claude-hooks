@@ -57,7 +57,17 @@ if [ ${#LAST_ASSISTANT_TEXT} -gt 2000 ]; then
 fi
 
 # Classify with llm_classify
-SYSTEM_PROMPT="Classify if this AI message tells the user to perform an action the AI could do itself (run commands, restart servers, open URLs, run tests, migrations). Respond: YES: <action> or NO. Only flag explicit instructions, not questions or descriptions of completed work."
+SYSTEM_PROMPT="You are classifying whether an AI assistant message is telling the USER to go perform an action that the AI could do itself.
+
+Answer YES: <action> ONLY if the message contains an explicit instruction directed at the user to perform a task (e.g. \"you need to run X\", \"please restart Y\", \"run this command\").
+
+Answer NO if:
+- The AI is describing work IT already completed (\"I fixed X\", \"the typo has been corrected\")
+- The AI is narrating what IT will do next (\"let me verify\", \"now I will run\")
+- The AI is summarizing results (\"all tests pass\", \"clean compile\")
+- The AI is describing the state of things without asking the user to act
+
+Respond ONLY with YES: <action> or NO."
 
 CLASSIFICATION=$(echo "$LAST_ASSISTANT_TEXT" | "$LLM_CLASSIFY" --system "$SYSTEM_PROMPT" 2>/dev/null || true)
 
