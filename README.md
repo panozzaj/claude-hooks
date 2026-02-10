@@ -45,7 +45,7 @@ Stop hook scripts fire after Claude finishes responding. They can block Claude f
 
 ### Shared Helpers
 
-- **scripts/common/llm_classify** - Wraps the `llm` CLI for fast YES/NO classification. Uses `gemma3:4b` by default (overridable via `LLM_CLASSIFY_MODEL` env var). Passes `--no-log` and `-o temperature 0` for deterministic output with a 30-second timeout.
+- **scripts/common/llm_classify** - Wraps the `llm` CLI for fast YES/NO classification. Uses `gemma3:4b` by default (overridable via `LLM_CLASSIFY_MODEL` env var). Passes `--no-log` and `-o temperature 0` for deterministic output with a 30-second timeout. Requires `llm` CLI (`pip install llm`) and an ollama model (`ollama pull gemma3:4b`).
 
 ### SessionStart
 
@@ -180,7 +180,7 @@ fi
 
 See [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks#persisting-environment-variables) for more details.
 
-Note: you'll have to restart claude code for changes to take effect. Typically I `/exit` and then restart with `claude -c` and state that I restarted.
+Note: you'll have to restart Claude Code for changes to take effect. You can use a [reload command](https://panozzaj.com/blog/2026/02/07/building-a-reload-command-for-claude-code/) to restart without losing session context.
 
 
 ## Output Format
