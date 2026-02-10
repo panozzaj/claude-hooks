@@ -1,0 +1,33 @@
+#!/bin/bash
+# Debug hook: logs lifecycle events to stdout and a log file.
+# Usage: log_event [label]
+# Reads hook JSON from stdin, extracts key fields, logs them.
+
+LABEL="${1:-unknown}"
+INPUT=$(cat)
+LOG_FILE="${CLAUDE_PROJECT_DIR:-$(pwd)}/tmp/hooks.log"
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Extract useful fields from JSON
+HOOK_EVENT=$(echo "$INPUT" | grep -o '"hook_event_name" *: *"[^"]*"' | sed 's/.*: *"\([^"]*\)"/\1/')
+TOOL_NAME=$(echo "$INPUT" | grep -o '"tool_name" *: *"[^"]*"' | sed 's/.*: *"\([^"]*\)"/\1/')
+AGENT_TYPE=$(echo "$INPUT" | grep -o '"agent_type" *: *"[^"]*"' | sed 's/.*: *"\([^"]*\)"/\1/')
+NOTIF_TYPE=$(echo "$INPUT" | grep -o '"notification_type" *: *"[^"]*"' | sed 's/.*: *"\([^"]*\)"/\1/')
+CWD=$(echo "$INPUT" | grep -o '"cwd" *: *"[^"]*"' | sed 's/.*: *"\([^"]*\)"/\1/')
+
+# Build a concise log line
+TIMESTAMP=$(date '+%H:%M:%S')
+DETAIL=""
+[ -n "$TOOL_NAME" ] && DETAIL="$DETAIL tool=$TOOL_NAME"
+[ -n "$AGENT_TYPE" ] && DETAIL="$DETAIL agent=$AGENT_TYPE"
+[ -n "$NOTIF_TYPE" ] && DETAIL="$DETAIL type=$NOTIF_TYPE"
+
+LINE="[$TIMESTAMP] $HOOK_EVENT ($LABEL)$DETAIL cwd=$CWD"
+
+# Log to file
+echo "$LINE" >> "$LOG_FILE"
+
+# Echo to stdout (visible in cc-tail / verbose mode)
+echo "$LINE"
+
+exit 0
