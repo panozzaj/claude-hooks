@@ -39,13 +39,24 @@ get_project_name() {
 
 PROJECT=$(get_project_name "$CWD")
 
-# Wait for any existing say process to finish so messages don't overlap
-while pgrep -x say > /dev/null 2>&1; do
-  sleep 0.2
-done
+# Background the wait+say so the hook returns immediately.
+# Each subshell waits for the prior say to finish, forming a queue.
+(
+  # Wait for any existing say process to finish (max 5s, then kill it)
+  WAIT_COUNT=0
+  while pgrep -x say > /dev/null 2>&1; do
+    sleep 0.2
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+    if [ $WAIT_COUNT -ge 25 ]; then
+      killall say 2>/dev/null || true
+      sleep 0.1
+      break
+    fi
+  done
 
-if [ -n "$PROJECT" ]; then
-  say "$MESSAGE $PROJECT"
-else
-  say "$MESSAGE"
-fi
+  if [ -n "$PROJECT" ]; then
+    timeout 10 say "$MESSAGE $PROJECT"
+  else
+    timeout 10 say "$MESSAGE"
+  fi
+) &
