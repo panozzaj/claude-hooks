@@ -1,0 +1,93 @@
+#!/bin/bash
+# Stop hook: Prompts Claude to commit dirty git state when changes look ready.
+#
+# Receives JSON on stdin: {session_id, transcript_path, cwd, permission_mode, hook_event_name, stop_hook_active}
+# Output {"decision": "block", "reason": "..."} to force Claude to keep working.
+# Exit 0 with no JSON output = approve (let Claude stop).
+#
+# Requires: jq, git, llm CLI (with ollama backend)
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LLM_CLASSIFY="$SCRIPT_DIR/../common/llm_classify"
+
+# Read JSON from stdin
+if [ -t 0 ]; then
+  exit 0
+fi
+INPUT=$(cat)
+
+# Check stop_hook_active to avoid infinite loops
+STOP_HOOK_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false')
+if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
+  exit 0
+fi
+
+# Extract cwd and cd to it
+CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
+if [ -z "$CWD" ] || [ ! -d "$CWD" ]; then
+  exit 0
+fi
+cd "$CWD"
+
+# Verify it's a git repo
+if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+  exit 0
+fi
+
+# Check git status
+GIT_STATUS=$(git status --porcelain 2>/dev/null || true)
+if [ -z "$GIT_STATUS" ]; then
+  exit 0
+fi
+
+# Fast path: skip if only tmp/, .playwright-mcp/, node_modules/ files changed
+SIGNIFICANT_CHANGES=$(echo "$GIT_STATUS" | grep -v -E '^\s*\??\??\s*(tmp/|\.playwright-mcp/|node_modules/)' || true)
+if [ -z "$SIGNIFICANT_CHANGES" ]; then
+  exit 0
+fi
+
+# Collect git info for classification
+GIT_DIFF=$(git diff HEAD 2>/dev/null | head -c 3000 || true)
+UNTRACKED=$(git ls-files --others --exclude-standard 2>/dev/null || true)
+
+# Build context for LLM
+CONTEXT="Git status:
+${GIT_STATUS}
+
+Untracked files:
+${UNTRACKED:-none}
+
+Diff (truncated):
+${GIT_DIFF:-no staged/unstaged diff}"
+
+# Classify with llm_classify
+SYSTEM_PROMPT="Assess if uncommitted git changes are meaningful and complete enough to commit. Say YES for coherent improvements. Say NO for broken/incomplete code, debug artifacts, or trivial changes. Respond ONLY YES or NO."
+
+CLASSIFICATION=$(echo "$CONTEXT" | "$LLM_CLASSIFY" --system "$SYSTEM_PROMPT" 2>/dev/null || true)
+
+if [ -z "$CLASSIFICATION" ]; then
+  exit 0
+fi
+
+# Check if classification starts with YES
+if [[ "$CLASSIFICATION" =~ ^YES ]]; then
+  # Build list of changed files for the reason message
+  CHANGED_FILES=$(echo "$GIT_STATUS" | awk '{print $NF}')
+  FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l | tr -d ' ')
+  if [ "$FILE_COUNT" -le 5 ]; then
+    FILE_LIST=$(echo "$CHANGED_FILES" | paste -sd', ' -)
+  else
+    FIRST_FILES=$(echo "$CHANGED_FILES" | head -5 | paste -sd', ' -)
+    REMAINING=$((FILE_COUNT - 5))
+    FILE_LIST="${FIRST_FILES} (and ${REMAINING} more)"
+  fi
+
+  REASON="Your git working directory has uncommitted changes that look ready to commit. Please review and commit: ${FILE_LIST}"
+  jq -n --arg reason "$REASON" '{"decision": "block", "reason": $reason}'
+  exit 0
+fi
+
+# NO or unrecognized response - let Claude stop
+exit 0

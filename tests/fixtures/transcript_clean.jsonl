@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Fix the typo in README"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I've fixed the typo in the README. The word 'recieve' has been corrected to 'receive'."}]}}

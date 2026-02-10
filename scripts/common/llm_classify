@@ -1,0 +1,52 @@
+#!/bin/bash
+# Shared helper wrapping `llm` CLI for fast YES/NO classification.
+#
+# Usage:
+#   echo "user prompt" | llm_classify --system "system prompt" [--model MODEL]
+#
+# Default model: gemma3:4b (fast, accurate for classification)
+# Override via LLM_CLASSIFY_MODEL env var.
+#
+# Passes --no-log and -o temperature 0 for deterministic, clean output.
+# Exit 0 = got a response, Exit 1 = error (llm not found, model unavailable, timeout)
+# 30-second timeout.
+
+set -e
+
+# Check llm is available
+if ! command -v llm &> /dev/null; then
+  echo "llm command not found" >&2
+  exit 1
+fi
+
+MODEL="${LLM_CLASSIFY_MODEL:-gemma3:4b}"
+
+# Parse arguments - pass through to llm
+LLM_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model)
+      MODEL="$2"
+      shift 2
+      ;;
+    --system)
+      LLM_ARGS+=("--system" "$2")
+      shift 2
+      ;;
+    *)
+      LLM_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# Read user prompt from stdin
+USER_PROMPT=$(cat)
+
+if [ -z "$USER_PROMPT" ]; then
+  echo "No input provided on stdin" >&2
+  exit 1
+fi
+
+# Run llm with timeout
+timeout 30 llm -m "$MODEL" --no-log -o temperature 0 "${LLM_ARGS[@]}" <<< "$USER_PROMPT"

@@ -1,0 +1,77 @@
+#!/bin/bash
+# Stop hook: Detects when Claude tells the user to do something the agent could do itself.
+#
+# Receives JSON on stdin: {session_id, transcript_path, cwd, permission_mode, hook_event_name, stop_hook_active}
+# Output {"decision": "block", "reason": "..."} to force Claude to keep working.
+# Exit 0 with no JSON output = approve (let Claude stop).
+#
+# Requires: jq, llm CLI (with ollama backend)
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LLM_CLASSIFY="$SCRIPT_DIR/../common/llm_classify"
+
+# Read JSON from stdin
+if [ -t 0 ]; then
+  exit 0
+fi
+INPUT=$(cat)
+
+# Check stop_hook_active to avoid infinite loops
+STOP_HOOK_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false')
+if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
+  exit 0
+fi
+
+# Extract transcript path
+TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty')
+if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
+  exit 0
+fi
+
+# Extract last assistant text message from JSONL transcript
+# Each line is a JSON object; find the last assistant message with text content
+LAST_ASSISTANT_TEXT=$(jq -s '
+  [.[] | select(.type == "assistant") | .message.content[]? |
+   select(.type == "text") | .text] | last // empty
+' "$TRANSCRIPT_PATH" 2>/dev/null || true)
+
+# Remove JSON string quotes (jq outputs quoted strings)
+LAST_ASSISTANT_TEXT=$(echo "$LAST_ASSISTANT_TEXT" | jq -r '. // empty' 2>/dev/null || true)
+
+if [ -z "$LAST_ASSISTANT_TEXT" ]; then
+  exit 0
+fi
+
+# Skip boilerplate messages
+if [ "$LAST_ASSISTANT_TEXT" = "No response requested." ]; then
+  exit 0
+fi
+
+# Truncate to last 2000 chars (DIY instructions tend to be at the end)
+if [ ${#LAST_ASSISTANT_TEXT} -gt 2000 ]; then
+  LAST_ASSISTANT_TEXT="${LAST_ASSISTANT_TEXT: -2000}"
+fi
+
+# Classify with llm_classify
+SYSTEM_PROMPT="Classify if this AI message tells the user to perform an action the AI could do itself (run commands, restart servers, open URLs, run tests, migrations). Respond: YES: <action> or NO. Only flag explicit instructions, not questions or descriptions of completed work."
+
+CLASSIFICATION=$(echo "$LAST_ASSISTANT_TEXT" | "$LLM_CLASSIFY" --system "$SYSTEM_PROMPT" 2>/dev/null || true)
+
+if [ -z "$CLASSIFICATION" ]; then
+  exit 0
+fi
+
+# Check if classification starts with YES
+if [[ "$CLASSIFICATION" =~ ^YES ]]; then
+  # Extract the action from "YES: <action>"
+  ACTION=$(echo "$CLASSIFICATION" | sed 's/^YES:[[:space:]]*//')
+  REASON="Your last message told the user to do something you can do yourself: ${ACTION}. Please do it instead of asking the user."
+  # Use jq to safely build JSON
+  jq -n --arg reason "$REASON" '{"decision": "block", "reason": $reason}'
+  exit 0
+fi
+
+# NO or unrecognized response - let Claude stop
+exit 0
