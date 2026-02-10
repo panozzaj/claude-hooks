@@ -4,6 +4,9 @@ setup() {
   export TEST_REPO=$(mktemp -d)
   # Separate temp dir for mock backups (outside any git repo under test)
   export MOCK_BACKUP_DIR=$(mktemp -d)
+  # Isolate cooldown files per test
+  export TMPDIR="$TEST_REPO/tmp"
+  mkdir -p "$TMPDIR"
   SCRIPT_PATH="$BATS_TEST_DIRNAME/../scripts/Stop/stop_diy_check"
   FIXTURES_DIR="$BATS_TEST_DIRNAME/fixtures"
 }
@@ -119,4 +122,31 @@ restore_llm_classify() {
 
   [ "$status" -eq 0 ]
   [ -z "$output" ]
+}
+
+@test "second block is suppressed by cooldown for same session" {
+  create_llm_classify_mock "YES: restart the server"
+
+  # First call should block
+  run bash -c 'echo "{\"stop_hook_active\": false, \"session_id\": \"sess_cooldown_test\", \"transcript_path\": \"'"$FIXTURES_DIR"'/transcript_diy_restart.jsonl\"}" | '"$SCRIPT_PATH"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
+
+  # Second call with same session_id should be suppressed
+  run bash -c 'echo "{\"stop_hook_active\": false, \"session_id\": \"sess_cooldown_test\", \"transcript_path\": \"'"$FIXTURES_DIR"'/transcript_diy_restart.jsonl\"}" | '"$SCRIPT_PATH"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "cooldown does not affect different sessions" {
+  create_llm_classify_mock "YES: restart the server"
+
+  # Block for session A
+  run bash -c 'echo "{\"stop_hook_active\": false, \"session_id\": \"sess_A\", \"transcript_path\": \"'"$FIXTURES_DIR"'/transcript_diy_restart.jsonl\"}" | '"$SCRIPT_PATH"
+  echo "$output" | jq -e '.decision == "block"'
+
+  # Session B should still block
+  run bash -c 'echo "{\"stop_hook_active\": false, \"session_id\": \"sess_B\", \"transcript_path\": \"'"$FIXTURES_DIR"'/transcript_diy_restart.jsonl\"}" | '"$SCRIPT_PATH"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.decision == "block"'
 }

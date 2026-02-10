@@ -11,6 +11,8 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LLM_CLASSIFY="$SCRIPT_DIR/../common/llm_classify"
+COOLDOWN="$SCRIPT_DIR/../common/cooldown"
+HOOK_NAME="stop_auto_commit"
 
 # Read JSON from stdin
 if [ -t 0 ]; then
@@ -73,6 +75,10 @@ fi
 
 # Check if classification starts with YES
 if [[ "$CLASSIFICATION" =~ ^YES ]]; then
+  # Check cooldown before blocking
+  SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
+  "$COOLDOWN" check "$SESSION_ID" "$HOOK_NAME" || exit 0
+
   # Build list of changed files for the reason message
   CHANGED_FILES=$(echo "$GIT_STATUS" | awk '{print $NF}')
   FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l | tr -d ' ')
@@ -86,6 +92,7 @@ if [[ "$CLASSIFICATION" =~ ^YES ]]; then
 
   REASON="Your git working directory has uncommitted changes that look ready to commit. Please review and commit: ${FILE_LIST}"
   jq -n --arg reason "$REASON" '{"decision": "block", "reason": $reason}'
+  "$COOLDOWN" record "$SESSION_ID" "$HOOK_NAME"
   exit 0
 fi
 
