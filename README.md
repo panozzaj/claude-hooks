@@ -33,6 +33,19 @@ All PostToolUse hook scripts are in the `scripts/PostToolUse/` directory:
 - **prettier_changed_files** - Prettier formatting
 - **stylelint_changed_files** - Stylelint with auto-fix
 
+### Stop
+
+Stop hook scripts fire after Claude finishes responding. They can block Claude from stopping and force it to keep working. Located in `scripts/Stop/`:
+
+- **stop_diy_check** - Detects when Claude tells the user to do something the agent could do itself (run commands, restart servers, etc.) and blocks, asking Claude to do it instead
+- **stop_auto_commit** - Detects uncommitted git changes that look ready to commit and blocks, asking Claude to review and commit them
+
+Both hooks use a local LLM (via `llm` CLI backed by ollama) for classification and degrade gracefully if the LLM is unavailable.
+
+### Shared Helpers
+
+- **scripts/common/llm_classify** - Wraps the `llm` CLI for fast YES/NO classification. Uses `gemma3:4b` by default (overridable via `LLM_CLASSIFY_MODEL` env var). Passes `--no-log` and `-o temperature 0` for deterministic output with a 30-second timeout.
+
 ### SessionStart
 
 SessionStart hook scripts are in the `scripts/SessionStart/` directory:
@@ -90,6 +103,38 @@ PreToolUse hooks run before tool execution. They're useful for capturing state b
 ```
 
 The `jj_snapshot` hook triggers a jj snapshot before file changes, allowing recovery via `jj evolog` if something goes wrong. It exits silently if jj isn't installed or the directory isn't a jj repo.
+
+### Stop Hooks
+
+Stop hooks fire after Claude finishes responding. They can block Claude from stopping by outputting `{"decision": "block", "reason": "..."}`. They receive JSON on stdin with `stop_hook_active` (must check to avoid infinite loops), `transcript_path`, `cwd`, and other fields.
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/path/to/claude-hooks/scripts/Stop/stop_diy_check"
+          },
+          {
+            "type": "command",
+            "command": "/path/to/claude-hooks/scripts/Stop/stop_auto_commit"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Prerequisites:** These hooks require `jq`, the `llm` CLI tool, and an ollama model (default: `gemma3:4b`). Install with:
+```bash
+brew install jq
+pip install llm
+ollama pull gemma3:4b
+```
 
 ### SessionStart Hooks
 

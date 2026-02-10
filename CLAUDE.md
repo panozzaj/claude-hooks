@@ -39,6 +39,11 @@ claude-hooks/                           # This repository (local dev)
 │   │   ├── prettier_changed_files
 │   │   ├── stylelint_changed_files
 │   │   └── typescript_check_changed_files
+│   ├── Stop/                           # Stop hook scripts
+│   │   ├── stop_diy_check             # Blocks when Claude tells user to DIY
+│   │   └── stop_auto_commit           # Blocks when git has uncommitted changes
+│   ├── common/                         # Shared helpers
+│   │   └── llm_classify               # YES/NO classification via local LLM
 │   └── debug/                          # Debug utilities
 │       ├── log_hook_params
 │       └── log_tool_name
