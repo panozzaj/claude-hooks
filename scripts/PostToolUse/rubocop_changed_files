@@ -10,7 +10,6 @@ set -e
 
 # Colors for output
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
 RED='\033[0;31m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
@@ -74,7 +73,7 @@ fi
 
 if [ "$VERBOSE" = true ]; then
   echo "Changed Ruby files detected:"
-  echo "$CHANGED_FILES" | sed 's/^/  /'
+  echo "  $CHANGED_FILES"
   echo ""
   echo "Running RuboCop with auto-correct (--force-exclusion respects .rubocop.yml exclusions)..."
   echo ""
@@ -87,7 +86,7 @@ RUBOCOP_OUTPUT=$(mktemp)
 
 # Use 'set +e' temporarily to capture exit status without script failing
 set +e
-$RUBOCOP_CMD -A --force-exclusion $CHANGED_FILES > "$RUBOCOP_OUTPUT" 2>&1
+$RUBOCOP_CMD -A --force-exclusion "$CHANGED_FILES" > "$RUBOCOP_OUTPUT" 2>&1
 RUBOCOP_STATUS=$?
 set -e
 

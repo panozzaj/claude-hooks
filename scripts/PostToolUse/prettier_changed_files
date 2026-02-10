@@ -15,6 +15,7 @@ set -e
 # Source nvm if available (needed for hooks which run in fresh shell)
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # shellcheck source=/dev/null
   source "$NVM_DIR/nvm.sh" --no-use
   # Use project's .nvmrc if present, otherwise default
   if [ -f ".nvmrc" ]; then
@@ -24,7 +25,6 @@ fi
 
 # Colors for output
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
 RED='\033[0;31m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
@@ -83,7 +83,7 @@ fi
 
 if [ "$VERBOSE" = true ]; then
   echo "Changed files detected:"
-  echo "$CHANGED_FILES" | sed 's/^/  /'
+  echo "  $CHANGED_FILES"
   echo ""
   echo "Running Prettier with auto-format..."
   echo ""
@@ -98,7 +98,7 @@ set +e
 
 # Run prettier without --write to get formatted output on stdout
 # This allows us to diff against original before making changes
-$PRETTIER_CMD $CHANGED_FILES > "$PRETTIER_OUTPUT" 2>&1
+$PRETTIER_CMD "$CHANGED_FILES" > "$PRETTIER_OUTPUT" 2>&1
 PRETTIER_STATUS=$?
 
 if [ $PRETTIER_STATUS -ne 0 ]; then
@@ -142,7 +142,7 @@ fi
 
 # Apply formatting with --write
 WRITE_OUTPUT=$(mktemp)
-$PRETTIER_CMD --write $CHANGED_FILES > "$WRITE_OUTPUT" 2>&1
+$PRETTIER_CMD --write "$CHANGED_FILES" > "$WRITE_OUTPUT" 2>&1
 WRITE_STATUS=$?
 set -e
 

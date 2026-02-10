@@ -62,7 +62,7 @@ fi
 
 if [ "$VERBOSE" = true ]; then
   echo "Changed HAML files detected:"
-  echo "$CHANGED_FILES" | sed 's/^/  /'
+  echo "  $CHANGED_FILES"
   echo ""
 fi
 
@@ -77,7 +77,7 @@ for file in $CHANGED_FILES; do
 done
 
 # Trim leading whitespace
-FILTERED_FILES=$(echo "$FILTERED_FILES" | sed 's/^ *//')
+FILTERED_FILES="${FILTERED_FILES# }"
 
 if [ -z "$FILTERED_FILES" ]; then
   echo -e "haml: ${GRAY}N/A${NC}"
@@ -113,7 +113,7 @@ fi
 # Capture output to provide consistent formatting
 HAML_OUTPUT=$(mktemp)
 set +e  # Temporarily disable exit on error to capture the exit code
-$CHECK_HAML_SCRIPT $FILTERED_FILES > "$HAML_OUTPUT" 2>&1
+$CHECK_HAML_SCRIPT "$FILTERED_FILES" > "$HAML_OUTPUT" 2>&1
 HAML_STATUS=$?
 set -e  # Re-enable exit on error
 

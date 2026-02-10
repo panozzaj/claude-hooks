@@ -11,7 +11,6 @@ set -e
 
 # Colors for output
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
 RED='\033[0;31m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
@@ -76,7 +75,7 @@ fi
 
 if [ "$VERBOSE" = true ]; then
   echo "Changed Python files detected:"
-  echo "$CHANGED_FILES" | sed 's/^/  /'
+  echo "  $CHANGED_FILES"
   echo ""
   echo "Running Ruff linter with auto-fix..."
   echo ""
@@ -86,7 +85,7 @@ fi
 RUFF_OUTPUT=$(mktemp)
 
 set +e
-$RUFF_CMD check --fix $CHANGED_FILES > "$RUFF_OUTPUT" 2>&1
+$RUFF_CMD check --fix "$CHANGED_FILES" > "$RUFF_OUTPUT" 2>&1
 RUFF_STATUS=$?
 set -e
 

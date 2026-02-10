@@ -6,6 +6,7 @@
 # Load nvm
 export NVM_DIR="$HOME/.nvm"
 if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # shellcheck source=/dev/null
   source "$NVM_DIR/nvm.sh"
 
   # If project has .nvmrc, use that version
@@ -17,11 +18,13 @@ fi
 # Persist key environment variables to CLAUDE_ENV_FILE
 if [ -n "$CLAUDE_ENV_FILE" ]; then
   # Export PATH (which now includes the correct nvm node version)
-  echo "export PATH=\"$PATH\"" >> "$CLAUDE_ENV_FILE"
-  # Export NVM_DIR and related vars
-  echo "export NVM_DIR=\"$NVM_DIR\"" >> "$CLAUDE_ENV_FILE"
-  echo "export NVM_BIN=\"$NVM_BIN\"" >> "$CLAUDE_ENV_FILE"
-  echo "export NVM_INC=\"$NVM_INC\"" >> "$CLAUDE_ENV_FILE"
+  {
+    echo "export PATH=\"$PATH\""
+    # Export NVM_DIR and related vars
+    echo "export NVM_DIR=\"$NVM_DIR\""
+    echo "export NVM_BIN=\"$NVM_BIN\""
+    echo "export NVM_INC=\"$NVM_INC\""
+  } >> "$CLAUDE_ENV_FILE"
 fi
 
 # Print confirmation (shows Node version being used)
