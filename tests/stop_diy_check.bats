@@ -138,6 +138,25 @@ restore_llm_classify() {
   [ -z "$output" ]
 }
 
+@test "pre-filter: exits 0 for 'please test' message (skips LLM)" {
+  # LLM mock says YES, but pre-filter should catch this before LLM runs
+  create_llm_classify_mock "YES: record a short phrase"
+
+  run bash -c 'echo "{\"stop_hook_active\": false, \"transcript_path\": \"'"$FIXTURES_DIR"'/transcript_testing_request.jsonl\"}" | '"$SCRIPT_PATH"
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "pre-filter: exits 0 for 'try it out' message (skips LLM)" {
+  create_llm_classify_mock "YES: try it out"
+
+  run bash -c 'echo "{\"stop_hook_active\": false, \"transcript_path\": \"'"$FIXTURES_DIR"'/transcript_try_it_out.jsonl\"}" | '"$SCRIPT_PATH"
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "cooldown does not affect different sessions" {
   create_llm_classify_mock "YES: restart the server"
 

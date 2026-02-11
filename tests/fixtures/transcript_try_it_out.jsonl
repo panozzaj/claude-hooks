@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Add the new feature"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"The feature is implemented. Try it out and let me know if the behavior matches what you expected."}]}}

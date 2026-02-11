@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Fix the recording feature"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"App is up (1.7s rebuild). Now please test — record a short phrase with Alt+X (stream mode OFF), then I'll check the logs."}]}}
