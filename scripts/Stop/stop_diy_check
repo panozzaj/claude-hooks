@@ -66,6 +66,8 @@ Answer NO if:
 - The AI is narrating what IT will do next (\"let me verify\", \"now I will run\")
 - The AI is summarizing results (\"all tests pass\", \"clean compile\")
 - The AI is describing the state of things without asking the user to act
+- The AI is asking the user to TEST or VERIFY something (e.g. \"please test this\", \"try it out\", \"check if it works\") — testing/verification requires human judgment and interaction
+- The AI is asking the user to do something physical that the AI cannot do (e.g. press a keyboard shortcut, click a UI element, open a browser)
 
 Respond ONLY with YES: <action> or NO."
 
@@ -84,7 +86,7 @@ if [[ "$CLASSIFICATION" =~ ^YES ]]; then
   # Extract the action from "YES: <action>"
   ACTION="${CLASSIFICATION#YES:}"
   ACTION="${ACTION# }"
-  REASON="Your last message told the user to do something you can do yourself: ${ACTION}. Please do it instead of asking the user."
+  REASON="[stop_diy_check] Your last message told the user to do something you can do yourself: ${ACTION}. Please do it instead of asking the user."
   # Use jq to safely build JSON
   jq -n --arg reason "$REASON" '{"decision": "block", "reason": $reason}'
   "$COOLDOWN" record "$SESSION_ID" "$HOOK_NAME"

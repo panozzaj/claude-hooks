@@ -86,7 +86,7 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 STALE_LIST=$(printf '%s, ' "${STALE[@]}")
 STALE_LIST="${STALE_LIST%, }"
 
-REASON="Build artifacts appear stale: ${STALE_LIST}. Source files modified since last build (e.g. ${NEWER_EXAMPLES}). Please rebuild."
+REASON="[stop_stale_build] Build artifacts appear stale: ${STALE_LIST}. Source files modified since last build (e.g. ${NEWER_EXAMPLES}). Please rebuild."
 jq -n --arg reason "$REASON" '{"decision": "block", "reason": $reason}'
 "$COOLDOWN" record "$SESSION_ID" "$HOOK_NAME"
 exit 0
