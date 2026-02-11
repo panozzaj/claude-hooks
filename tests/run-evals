@@ -1,0 +1,63 @@
+#!/bin/bash
+# Run eval tests for Claude Code hook scripts.
+#
+# Evals call the real LLM (requires ollama running with gemma3:4b).
+# They test prompt quality, not script plumbing.
+# Separated from unit tests (run-tests) because they are slower and non-deterministic.
+#
+# Usage:
+#   ./tests/run-evals                    # Run all evals
+#   ./tests/run-evals evals/specific.bats  # Run specific eval file
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+# Change to tests directory
+cd "$(dirname "$0")"
+
+echo -e "${BLUE}Running eval tests for Claude Code hook scripts...${NC}"
+echo -e "${YELLOW}These tests call the real LLM — requires ollama running with gemma3:4b${NC}"
+echo ""
+
+# Check if bats is installed
+if ! command -v bats &> /dev/null; then
+  echo -e "${RED}Error: bats-core is not installed${NC}"
+  echo "Install it with: brew install bats-core"
+  exit 1
+fi
+
+# Check if llm is available
+if ! command -v llm &> /dev/null; then
+  echo -e "${RED}Error: llm CLI is not installed${NC}"
+  echo "Install it with: pip install llm llm-ollama"
+  exit 1
+fi
+
+# Run evals
+if [ $# -gt 0 ]; then
+  if bats "$@"; then
+    echo ""
+    echo -e "${GREEN}✓ All evals passed!${NC}"
+    exit 0
+  else
+    echo ""
+    echo -e "${RED}✗ Some evals failed${NC}"
+    exit 1
+  fi
+else
+  if bats evals/*.bats; then
+    echo ""
+    echo -e "${GREEN}✓ All evals passed!${NC}"
+    exit 0
+  else
+    echo ""
+    echo -e "${RED}✗ Some evals failed${NC}"
+    exit 1
+  fi
+fi

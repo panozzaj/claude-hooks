@@ -50,10 +50,13 @@ claude-hooks/                           # This repository (local dev)
 │       ├── log_hook_params
 │       └── log_tool_name
 └── tests/                              # Test suite
-    ├── run-tests                       # Test runner
+    ├── run-tests                       # Unit test runner (fast, mocked)
+    ├── run-evals                       # Eval runner (slow, real LLM)
     ├── README.md                       # Testing docs
     ├── test_helper.bash                # Test utilities
-    ├── *.bats                          # Test files
+    ├── *.bats                          # Unit test files
+    ├── evals/                          # LLM eval tests
+    │   └── stop_diy_check_eval.bats   # Prompt quality evals
     └── fixtures/                       # Test data
 ```
 
@@ -61,8 +64,16 @@ Users reference these scripts with absolute paths in their Claude Code settings 
 
 ## Testing
 
-To run tests, use the script and `tee` to avoid hanging:
+Unit tests (fast, mocked LLM):
 
 ```bash
 ./tests/run-tests 2>&1 | tee ./tmp/test-output.txt
 ```
+
+Eval tests (slow, requires ollama with gemma3:4b):
+
+```bash
+./tests/run-evals 2>&1 | tee ./tmp/eval-output.txt
+```
+
+Evals test LLM prompt quality against real examples. Run evals after changing any LLM system prompt.
