@@ -157,6 +157,15 @@ restore_llm_classify() {
   [ -z "$output" ]
 }
 
+@test "pre-filter: exits 0 for 'let me run' narration (skips LLM)" {
+  create_llm_classify_mock "YES: run just that eval"
+
+  run bash -c 'echo "{\"stop_hook_active\": false, \"transcript_path\": \"'"$FIXTURES_DIR"'/transcript_let_me_run.jsonl\"}" | '"$SCRIPT_PATH"
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "cooldown does not affect different sessions" {
   create_llm_classify_mock "YES: restart the server"
 

@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Add an eval for this case"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Now let me run just that eval to see if it passes or fails with the current LLM prompt."}]}}

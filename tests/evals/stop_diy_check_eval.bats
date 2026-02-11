@@ -169,6 +169,14 @@ assert_script_allows() {
   assert_llm_no "The build succeeded with no warnings. Here's a summary of what changed:"
 }
 
+@test "LLM NO: tests pass with feature description" {
+  assert_llm_no "All 43 tests pass. Wind speed now shows in both hourly and daily results — e.g. 72°F — Clear sky, 9 mph wind."
+}
+
+@test "LLM NO: 'let me run' narration" {
+  assert_llm_no "Now let me run just that eval to see if it passes or fails with the current LLM prompt."
+}
+
 # ============================================================
 # Full-script evals: pre-filter catches testing/verification
 # (These would fail as LLM-only but pass with the pre-filter)
@@ -189,6 +197,10 @@ assert_script_allows() {
 # ============================================================
 # Full-script evals: YES cases still block through full pipeline
 # ============================================================
+
+@test "SCRIPT ALLOWS: 'let me run' narration (pre-filter)" {
+  assert_script_allows "Now let me run just that eval to see if it passes or fails with the current LLM prompt."
+}
 
 @test "SCRIPT BLOCKS: 'you need to restart the server'" {
   assert_script_blocks "I've updated the server configuration file. Now you need to restart the server by running fireup restart to apply the changes."

@@ -56,11 +56,17 @@ if [ ${#LAST_ASSISTANT_TEXT} -gt 2000 ]; then
   LAST_ASSISTANT_TEXT="${LAST_ASSISTANT_TEXT: -2000}"
 fi
 
-# Pre-filter: skip LLM if message is clearly a testing/verification request.
-# The small LLM struggles to distinguish "test by pressing Alt+X" (human-only)
-# from "run this command" (agent-doable), so we handle this deterministically.
+# Pre-filter: skip LLM for messages that are clearly not DIY instructions.
+# The small LLM struggles with certain patterns, so we handle them deterministically.
 LOWER_TEXT=$(echo "$LAST_ASSISTANT_TEXT" | tr '[:upper:]' '[:lower:]')
+
+# Testing/verification requests (human-only actions the AI can't do)
 if echo "$LOWER_TEXT" | grep -qE '(please test|now test|try it out|try clicking|let me know if|check if .* (look|work|correct|right)|test .* and (let me|i.ll))'; then
+  exit 0
+fi
+
+# AI narrating its own next action ("let me run", "let me check", etc.)
+if echo "$LOWER_TEXT" | grep -qE '(^|[.!] )(now )?let me [a-z]'; then
   exit 0
 fi
 
