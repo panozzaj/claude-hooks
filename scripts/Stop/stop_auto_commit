@@ -50,8 +50,9 @@ if [ -z "$SIGNIFICANT_CHANGES" ]; then
   exit 0
 fi
 
-# Collect git info for classification
-GIT_DIFF=$(git diff HEAD 2>/dev/null | head -c 3000 || true)
+# Collect git info for classification — use --stat for a compact overview
+# (raw diff gets truncated and confuses the small LLM)
+GIT_STAT=$(git diff --stat HEAD 2>/dev/null || true)
 UNTRACKED=$(git ls-files --others --exclude-standard 2>/dev/null || true)
 
 # Build context for LLM
@@ -61,11 +62,11 @@ ${GIT_STATUS}
 Untracked files:
 ${UNTRACKED:-none}
 
-Diff (truncated):
-${GIT_DIFF:-no staged/unstaged diff}"
+Change summary:
+${GIT_STAT:-no changes}"
 
 # Classify with llm_classify
-SYSTEM_PROMPT="Assess if uncommitted git changes are meaningful and complete enough to commit. Say YES for coherent improvements. Say NO for broken/incomplete code, debug artifacts, or trivial changes. Respond ONLY YES or NO."
+SYSTEM_PROMPT="Should these uncommitted git changes be committed? Say YES unless the changes are clearly debug artifacts (console.log, binding.pry), scratch files, or obviously broken (syntax errors, conflict markers). Respond ONLY YES or NO."
 
 CLASSIFICATION=$(echo "$CONTEXT" | "$LLM_CLASSIFY" --system "$SYSTEM_PROMPT" 2>/dev/null || true)
 
