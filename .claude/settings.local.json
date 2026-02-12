@@ -1,0 +1,33 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/anthony/Documents/dev/claude-hooks/scripts/PostToolUse/shellcheck_changed_files"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/anthony/Documents/dev/claude-hooks/scripts/Stop/stop_diy_check"
+          },
+          {
+            "type": "command",
+            "command": "/Users/anthony/Documents/dev/claude-hooks/scripts/Stop/stop_auto_commit"
+          },
+          {
+            "type": "command",
+            "command": "/Users/anthony/Documents/dev/claude-hooks/scripts/Stop/stop_missing_tests"
+          }
+        ]
+      }
+    ]
+  }
+}
