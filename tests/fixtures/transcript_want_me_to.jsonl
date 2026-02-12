@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Refactor the auth module"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"The feature is complete. Want me to also add tests?"}]}}

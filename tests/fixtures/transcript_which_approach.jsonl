@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"what about a stop hook for tests?"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Two approaches: a CLAUDE.md instruction or a stop hook. Which direction interests you — the CLAUDE.md nudge, the stop hook, or both?"}]}}

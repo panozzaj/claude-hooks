@@ -157,6 +157,24 @@ restore_llm_classify() {
   [ -z "$output" ]
 }
 
+@test "pre-filter: exits 0 for 'which direction' preference question (skips LLM)" {
+  create_llm_classify_mock "YES: choose an approach"
+
+  run bash -c 'echo "{\"stop_hook_active\": false, \"transcript_path\": \"'"$FIXTURES_DIR"'/transcript_which_approach.jsonl\"}" | '"$SCRIPT_PATH"
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "pre-filter: exits 0 for 'want me to' offer (skips LLM)" {
+  create_llm_classify_mock "YES: add tests"
+
+  run bash -c 'echo "{\"stop_hook_active\": false, \"transcript_path\": \"'"$FIXTURES_DIR"'/transcript_want_me_to.jsonl\"}" | '"$SCRIPT_PATH"
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "pre-filter: exits 0 for 'let me run' narration (skips LLM)" {
   create_llm_classify_mock "YES: run just that eval"
 

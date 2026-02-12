@@ -66,7 +66,18 @@ if echo "$LOWER_TEXT" | grep -qE '(please test|now test|try it out|try clicking|
 fi
 
 # AI narrating its own next action ("let me run", "let me check", etc.)
-if echo "$LOWER_TEXT" | grep -qE '(^|[.!] )(now )?let me [a-z]'; then
+# Exclude "let me know" — that could embed a DIY ("let me know when you've restarted")
+if echo "$LOWER_TEXT" | grep -qE '(^|[.!] )(now )?let me [a-z]' && ! echo "$LOWER_TEXT" | grep -qE '(^|[.!] )(now )?let me know'; then
+  exit 0
+fi
+
+# AI offering to do more work ("want me to X?", "should I also X?", "shall I X?")
+if echo "$LOWER_TEXT" | grep -qE '(want me to |should i (also )?|shall i |would you like me to |i can also )'; then
+  exit 0
+fi
+
+# AI asking user for a decision or preference
+if echo "$LOWER_TEXT" | grep -qE '(which .* (do you|would you|interests you)|what do you think\?|what approach|do you prefer)'; then
   exit 0
 fi
 
@@ -80,6 +91,9 @@ Answer NO if:
 - The AI is narrating what IT will do next (\"let me verify\", \"now I will run\")
 - The AI is summarizing results (\"all tests pass\", \"clean compile\")
 - The AI is describing the state of things without asking the user to act
+- The AI is describing requirements or consequences (\"requires a restart\", \"will need a deploy\")
+- The AI is offering to do more work (\"want me to X?\", \"should I also X?\", \"I can also X\")
+- The AI is asking the user for a decision or preference (\"which approach do you prefer?\", \"what do you think?\")
 
 Respond ONLY with YES: <action> or NO."
 

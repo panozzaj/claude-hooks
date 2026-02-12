@@ -23,6 +23,9 @@ Answer NO if:
 - The AI is narrating what IT will do next ("let me verify", "now I will run")
 - The AI is summarizing results ("all tests pass", "clean compile")
 - The AI is describing the state of things without asking the user to act
+- The AI is describing requirements or consequences ("requires a restart", "will need a deploy")
+- The AI is offering to do more work ("want me to X?", "should I also X?", "I can also X")
+- The AI is asking the user for a decision or preference ("which approach do you prefer?", "what do you think?")
 
 Respond ONLY with YES: <action> or NO.
 PROMPT_EOF
@@ -173,8 +176,72 @@ assert_script_allows() {
   assert_llm_no "All 43 tests pass. Wind speed now shows in both hourly and daily results — e.g. 72°F — Clear sky, 9 mph wind."
 }
 
-@test "LLM NO: 'let me run' narration" {
-  assert_llm_no "Now let me run just that eval to see if it passes or fails with the current LLM prompt."
+# "let me run" is a known LLM weakness (small model misclassifies narration as instruction).
+# Handled by pre-filter — see SCRIPT ALLOWS test below. No LLM-only eval needed.
+
+# --- Edge cases: NO (false positive risks) ---
+
+@test "LLM NO: 'requires a restart' (describes state, not instruction)" {
+  assert_llm_no "I've made all the changes. The application now requires a restart to pick up the new configuration."
+}
+
+@test "LLM NO: 'Run output' as label not instruction" {
+  assert_llm_no "Here's a summary of the changes. Run output: 15 passed, 0 failed, 2 skipped."
+}
+
+@test "LLM NO: 'you can see' is observation not instruction" {
+  assert_llm_no "I've refactored the module. You can see the changes affect three files."
+}
+
+@test "LLM NO: mentions future deploy without instructing" {
+  assert_llm_no "Changes committed. Next time you deploy, the fix will be live."
+}
+
+# "Want me to X?" is a known LLM weakness (small model misclassifies offers as instructions).
+# Handled by pre-filter — see SCRIPT ALLOWS test below.
+
+@test "LLM NO: narrating with I'll" {
+  assert_llm_no "I noticed the CI is failing. The error is in the authentication module — I'll investigate next."
+}
+
+@test "LLM NO: bullet-point summary of changes" {
+  assert_llm_no "All done! Here's what changed:
+- Updated API endpoint
+- Fixed validation
+- Added error handling"
+}
+
+@test "LLM NO: 'your database' is possessive not instructive" {
+  assert_llm_no "The migration has been applied. Your database schema now includes the new columns."
+}
+
+@test "LLM NO: asking user for preference on approach" {
+  assert_llm_no "Two complementary approaches: a CLAUDE.md instruction or a stop hook. The hook approach is nice because it's enforceable. Which direction interests you — the CLAUDE.md nudge, the stop hook, or both?"
+}
+
+# "What do you think?" is a known LLM weakness (small model misclassifies preference questions).
+# Handled by pre-filter — see SCRIPT ALLOWS test below.
+
+@test "LLM NO: let me also (narration)" {
+  assert_llm_no "I fixed the bug. Let me also update the documentation while I'm at it."
+}
+
+# --- Edge cases: YES (false negative risks) ---
+
+@test "LLM YES: implicit instruction with 'restart the server'" {
+  assert_llm_yes "To apply these changes, restart the server with fireup restart."
+}
+
+@test "LLM YES: 'go ahead and run'" {
+  assert_llm_yes "The config is updated. Go ahead and run the tests to verify."
+}
+
+@test "LLM YES: 'add gem to your Gemfile'" {
+  assert_llm_yes "One more thing — add gem 'sidekiq' to your Gemfile."
+}
+
+@test "LLM YES: 'let me know when you restart' (DIY embedded in politeness)" {
+  assert_llm_yes "Let me know when you've restarted the server so I can check the logs."
 }
 
 # ============================================================
@@ -200,6 +267,34 @@ assert_script_allows() {
 
 @test "SCRIPT ALLOWS: 'let me run' narration (pre-filter)" {
   assert_script_allows "Now let me run just that eval to see if it passes or fails with the current LLM prompt."
+}
+
+@test "SCRIPT ALLOWS: 'which direction' preference question (pre-filter)" {
+  assert_script_allows "Two approaches: a CLAUDE.md instruction or a stop hook. Which direction interests you — the CLAUDE.md nudge, the stop hook, or both?"
+}
+
+@test "SCRIPT ALLOWS: 'what do you think' preference question (pre-filter)" {
+  assert_script_allows "We could use Redis for caching or stick with in-memory. Redis is more robust but adds a dependency. What do you think?"
+}
+
+@test "SCRIPT ALLOWS: 'want me to' offer (pre-filter)" {
+  assert_script_allows "The feature is complete. Want me to also add tests?"
+}
+
+@test "SCRIPT ALLOWS: 'should I also' offer (pre-filter)" {
+  assert_script_allows "Done with the refactor. Should I also update the tests to match?"
+}
+
+@test "SCRIPT ALLOWS: 'would you like me to' offer (pre-filter)" {
+  assert_script_allows "The migration is ready. Would you like me to also update the seed data?"
+}
+
+@test "SCRIPT ALLOWS: 'let me also update' narration (pre-filter)" {
+  assert_script_allows "I fixed the bug. Let me also update the documentation while I'm at it."
+}
+
+@test "SCRIPT BLOCKS: 'let me know when you restart' (not caught by pre-filter)" {
+  assert_script_blocks "Let me know when you've restarted the server so I can check the logs."
 }
 
 @test "SCRIPT BLOCKS: 'you need to restart the server'" {
