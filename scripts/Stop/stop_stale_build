@@ -3,9 +3,11 @@
 #
 # Usage in settings:
 #   "command": "/path/to/scripts/Stop/stop_stale_build dist/bundle.js tmp/pids/server.pid"
+#   "command": "/path/to/scripts/Stop/stop_stale_build target/debug/mybin --sources src,Cargo.toml,Cargo.lock"
 #
 # Artifact paths are passed as command-line arguments and resolved relative to cwd.
-# Uses mtime comparison (find -newer) - no LLM needed.
+# --sources dir1,dir2,file  Restrict staleness check to these paths (default: all git-tracked files).
+# Uses mtime comparison on git-tracked files only - no LLM needed.
 #
 # Receives JSON on stdin: {session_id, transcript_path, cwd, stop_hook_active, ...}
 # Output {"decision": "block", "reason": "..."} if artifacts are stale.
@@ -36,15 +38,30 @@ if [ -z "$CWD" ] || [ ! -d "$CWD" ]; then
 fi
 cd "$CWD"
 
-# Paths to check come from command-line arguments
-if [ $# -eq 0 ]; then
+# Parse arguments: artifacts and optional --sources filter
+ARTIFACTS=()
+SOURCE_PATHS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --sources)
+      IFS=',' read -ra SOURCE_PATHS <<< "$2"
+      shift 2
+      ;;
+    *)
+      ARTIFACTS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [ ${#ARTIFACTS[@]} -eq 0 ]; then
   exit 0
 fi
 
 STALE=()
 NEWER_EXAMPLES=""
 
-for artifact in "$@"; do
+for artifact in "${ARTIFACTS[@]}"; do
   # Resolve relative to cwd
   if [[ "$artifact" != /* ]]; then
     artifact="$CWD/$artifact"
@@ -55,17 +72,11 @@ for artifact in "$@"; do
     continue
   fi
 
-  # Find source files newer than this artifact, excluding common non-source dirs
-  NEWER=$(find . -newer "$artifact" \
-    -not -path './.git/*' \
-    -not -path './node_modules/*' \
-    -not -path './tmp/*' \
-    -not -path './.playwright-mcp/*' \
-    -not -path './dist/*' \
-    -not -path './build/*' \
-    -not -path './.next/*' \
-    -not -path './target/*' \
-    -type f 2>/dev/null | head -5)
+  # Only check git-tracked files (respects .gitignore automatically)
+  # If --sources specified, restrict to those paths
+  NEWER=$(git ls-files -- "${SOURCE_PATHS[@]:-.}" 2>/dev/null \
+    | while read -r f; do [ "$f" -nt "$artifact" ] && echo "$f"; done \
+    | head -5)
 
   if [ -n "$NEWER" ]; then
     STALE+=("$(basename "$artifact")")
