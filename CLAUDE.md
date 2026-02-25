@@ -32,22 +32,37 @@ claude-hooks/                           # This repository (local dev)
 │   ├── hook_interface.md               # Hook interface specification
 │   └── output_examples.md              # Visual output examples
 ├── scripts/                            # Hook scripts
+│   ├── PreToolUse/                     # PreToolUse hook scripts
+│   │   └── jj_snapshot                # Snapshot jj working copy before changes
 │   ├── PostToolUse/                    # PostToolUse hook scripts
-│   │   ├── rubocop_changed_files
-│   │   ├── haml_check_changed_files
+│   │   ├── cargo_clippy_changed_files
+│   │   ├── cargo_fmt_changed_files
 │   │   ├── eslint_changed_files
+│   │   ├── gofmt_changed_files
+│   │   ├── haml_check_changed_files
+│   │   ├── mypy_check_changed_files
 │   │   ├── prettier_changed_files
+│   │   ├── rubocop_changed_files
+│   │   ├── ruff_check_changed_files
+│   │   ├── ruff_format_changed_files
+│   │   ├── shellcheck_changed_files
 │   │   ├── stylelint_changed_files
 │   │   └── typescript_check_changed_files
 │   ├── Stop/                           # Stop hook scripts
-│   │   ├── stop_diy_check             # Blocks when Claude tells user to DIY
 │   │   ├── stop_auto_commit           # Blocks when git has uncommitted changes
+│   │   ├── stop_diy_check             # Blocks when Claude tells user to DIY
+│   │   ├── stop_missing_tests         # Blocks when source changed without tests
 │   │   └── stop_stale_build           # Blocks when build artifacts are stale
 │   ├── common/                         # Shared helpers
+│   │   ├── cooldown                   # Per-session cooldown to prevent repeat blocks
+│   │   ├── jj_snapshot                # jj snapshot helper
 │   │   ├── llm_classify               # YES/NO classification via local LLM
-│   │   └── cooldown                   # Per-session cooldown to prevent repeat blocks
+│   │   └── say_with_project           # macOS say with project name
+│   ├── SessionStart/                   # SessionStart hook scripts
+│   │   └── nvm_setup                  # Load nvm and set Node version
 │   └── debug/                          # Debug utilities
 │       ├── log_hook_params
+│       ├── log_lifecycle_event
 │       └── log_tool_name
 └── tests/                              # Test suite
     ├── run-tests                       # Unit test runner (fast, mocked)

@@ -27,20 +27,30 @@ PreToolUse hook scripts run before tool execution. Located in `scripts/PreToolUs
 
 All PostToolUse hook scripts are in the `scripts/PostToolUse/` directory:
 
-- **rubocop_changed_files** - RuboCop with auto-correction
-- **haml_check_changed_files** - HAML syntax validation
+- **cargo_clippy_changed_files** - Cargo clippy with auto-fix
+- **cargo_fmt_changed_files** - Cargo fmt formatting
 - **eslint_changed_files** - ESLint with auto-fix
+- **gofmt_changed_files** - Go formatting
+- **haml_check_changed_files** - HAML syntax validation
+- **mypy_check_changed_files** - mypy type checking for Python
 - **prettier_changed_files** - Prettier formatting
+- **rubocop_changed_files** - RuboCop with auto-correction
+- **ruff_check_changed_files** - Ruff linting with auto-fix for Python
+- **ruff_format_changed_files** - Ruff formatting for Python
+- **shellcheck_changed_files** - ShellCheck for shell scripts
 - **stylelint_changed_files** - Stylelint with auto-fix
+- **typescript_check_changed_files** - TypeScript type checking
 
 ### Stop
 
-> **Beta:** Stop hooks are still being refined. Expect rough edges — prompts, classification accuracy, and edge case handling are actively being improved.
+> [!WARNING]
+> Stop hooks are still being refined. Expect rough edges — prompts, classification accuracy, and edge case handling are actively being improved.
 
 Stop hook scripts fire after Claude finishes responding. They can block Claude from stopping and force it to keep working. Located in `scripts/Stop/`:
 
 - **stop_diy_check** - Detects when Claude tells the user to do something the agent could do itself (run commands, restart servers, etc.) and blocks, asking Claude to do it instead
 - **stop_auto_commit** - Detects uncommitted git changes that look ready to commit and blocks, asking Claude to review and commit them
+- **stop_missing_tests** - Detects when source files are changed without any test files being modified and blocks, asking Claude to add tests. No LLM needed - pure git diff analysis.
 - **stop_stale_build** - Checks if build artifacts are stale (source files newer than artifact mtime) and blocks, asking Claude to rebuild. Takes artifact path(s) as command-line arguments. No LLM needed - pure timestamp comparison.
 
 `stop_diy_check` and `stop_auto_commit` use a local LLM (via `llm` CLI backed by ollama) for classification and degrade gracefully if the LLM is unavailable. `stop_stale_build` uses only `find -newer` and has no dependencies beyond `jq`.
@@ -48,6 +58,8 @@ Stop hook scripts fire after Claude finishes responding. They can block Claude f
 ### Shared Helpers
 
 - **scripts/common/llm_classify** - Wraps the `llm` CLI for fast YES/NO classification. Uses `gemma3:4b` by default (overridable via `LLM_CLASSIFY_MODEL` env var). Passes `--no-log` and `-o temperature 0` for deterministic output with a 30-second timeout. Requires `llm` CLI (`pip install llm`) and an ollama model (`ollama pull gemma3:4b`).
+- **scripts/common/cooldown** - Per-session cooldown to prevent Stop hooks from blocking repeatedly. Default 5-minute cooldown, configurable via `STOP_HOOK_COOLDOWN` env var.
+- **scripts/common/say_with_project** - Uses macOS `say` to announce a message with the project name appended (e.g., "check my-project").
 
 ### SessionStart
 
@@ -230,6 +242,7 @@ See `tests/README.md` for full testing documentation.
 Debug helper scripts are in the `scripts/debug/` directory:
 
 - `log_hook_params` - Logs all parameters passed to hooks
+- `log_lifecycle_event` - Logs lifecycle events (hook name, tool, agent type) to file and stdout
 - `log_tool_name` - Logs tool name for debugging
 
 ## Claude Code Hook System
