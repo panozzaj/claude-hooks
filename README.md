@@ -35,6 +35,8 @@ All PostToolUse hook scripts are in the `scripts/PostToolUse/` directory:
 
 ### Stop
 
+> **Beta:** Stop hooks are still being refined. Expect rough edges — prompts, classification accuracy, and edge case handling are actively being improved.
+
 Stop hook scripts fire after Claude finishes responding. They can block Claude from stopping and force it to keep working. Located in `scripts/Stop/`:
 
 - **stop_diy_check** - Detects when Claude tells the user to do something the agent could do itself (run commands, restart servers, etc.) and blocks, asking Claude to do it instead
@@ -103,7 +105,7 @@ PreToolUse hooks run before tool execution. They're useful for capturing state b
 }
 ```
 
-The `jj_snapshot` hook triggers a jj snapshot before file changes, allowing recovery via `jj evolog` if something goes wrong. It exits silently if jj isn't installed or the directory isn't a jj repo.
+The `jj_snapshot` hook triggers a jj snapshot before file changes, allowing recovery via `jj evolog` if something goes wrong. It exits silently if jj isn't installed or the directory isn't a jj repo. See [Making snapshots automatic](https://www.panozzaj.com/blog/2025/11/22/avoid-losing-work-with-jujutsu-jj-for-ai-coding-agents/#making-snapshots-automatic) for background on this approach.
 
 ### Stop Hooks
 
