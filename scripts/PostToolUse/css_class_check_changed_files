@@ -1,0 +1,233 @@
+#!/bin/bash
+# Validates that CSS classes used in template files exist in the project's compiled CSS.
+# Catches wrong Tailwind versions, typos, and made-up class names.
+#
+# Usage:
+#   - As Claude Code hook: receives JSON via STDIN
+#   - Direct invocation: css_class_check_changed_files [-v|--verbose] [file1 file2 ...]
+#
+# Index auto-generation:
+#   Extracts class names from compiled CSS output. Auto-detects CSS source:
+#   - public/packs/css/application.css (Shakapacker/Webpacker)
+#   - app/assets/builds/application.css (cssbundling-rails)
+#   - public/assets/application-*.css (Sprockets)
+#   Caches to tmp/css-classes.txt, rebuilds when source CSS changes.
+#
+# Allowlist:
+#   Add classes to tmp/css-class-allowlist.txt (one per line) to suppress false positives.
+#
+# See ../../docs/hook_interface.md for interface specification and exit code behavior
+
+set -e
+
+TOOL_NAME="css-class-check"
+FILE_REGEX='\.(haml|erb)$'
+INDEX_FILE="tmp/css-classes.txt"
+ALLOWLIST_FILE="tmp/css-class-allowlist.txt"
+
+# Colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+GRAY='\033[0;90m'
+NC='\033[0m' # No Color
+
+# Parse verbose flag
+VERBOSE=false
+FILES_ARG=()
+for arg in "$@"; do
+  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
+    VERBOSE=true
+  else
+    FILES_ARG+=("$arg")
+  fi
+done
+
+# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
+CHANGED_FILES=""
+
+if [ "${#FILES_ARG[@]}" -gt 0 ]; then
+  CHANGED_FILES="${FILES_ARG[*]}"
+else
+  if [ ! -t 0 ]; then
+    HOOK_JSON=$(cat)
+    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+    if [ -z "$FILE_PATH" ]; then
+      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+    fi
+    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ $FILE_REGEX ]]; then
+      CHANGED_FILES="$FILE_PATH"
+    fi
+  fi
+fi
+
+if [ -z "$CHANGED_FILES" ]; then
+  printf '%s: %bN/A%b\n' "$TOOL_NAME" "$GRAY" "$NC"
+  exit 0
+fi
+
+# Filter to only files that exist
+FILTERED_FILES=""
+for file in $CHANGED_FILES; do
+  if [ -f "$file" ]; then
+    FILTERED_FILES="$FILTERED_FILES $file"
+  fi
+done
+FILTERED_FILES="${FILTERED_FILES# }"
+
+if [ -z "$FILTERED_FILES" ]; then
+  printf '%s: %bN/A%b\n' "$TOOL_NAME" "$GRAY" "$NC"
+  exit 0
+fi
+
+# --- Index management ---
+
+# Find compiled CSS source
+find_css_source() {
+  # Shakapacker / Webpacker
+  if [ -f "public/packs/css/application.css" ]; then
+    echo "public/packs/css/application.css"
+    return
+  fi
+  # cssbundling-rails
+  if [ -f "app/assets/builds/application.css" ]; then
+    echo "app/assets/builds/application.css"
+    return
+  fi
+  # Sprockets (find most recent)
+  local sprockets_css
+  sprockets_css=$(find public/assets -maxdepth 1 -name 'application-*.css' -print 2>/dev/null | head -1)
+  if [ -n "$sprockets_css" ]; then
+    echo "$sprockets_css"
+    return
+  fi
+}
+
+# Extract class names from CSS file into index
+build_index() {
+  local css_source="$1"
+
+  if [ "$VERBOSE" = true ]; then
+    echo "Building CSS class index from: $css_source"
+  fi
+
+  mkdir -p tmp
+
+  # Extract class selectors from CSS, handling:
+  # - Regular classes: .text-red-500
+  # - Escaped colons (Tailwind variants): .hover\:bg-red-500:hover
+  # - Escaped slashes (fractions): .w-1\/2
+  # - CSS unicode escapes (digit-prefixed classes): .\32k\:flex → 2k:flex
+  grep -oE '\.(\\[0-9a-fA-F]+[[:space:]]?|[a-zA-Z_-])[a-zA-Z0-9_\\:/.%*-]*' "$css_source" | \
+    sed -E 's/([^\\]):.*/\1/' | \
+    sed 's/^\.//' | \
+    sed -E 's/\\30[[:space:]]?/0/g; s/\\31[[:space:]]?/1/g; s/\\32[[:space:]]?/2/g; s/\\33[[:space:]]?/3/g; s/\\34[[:space:]]?/4/g; s/\\35[[:space:]]?/5/g; s/\\36[[:space:]]?/6/g; s/\\37[[:space:]]?/7/g; s/\\38[[:space:]]?/8/g; s/\\39[[:space:]]?/9/g' | \
+    sed 's/\\//g' | \
+    grep -v '^$' | \
+    sort -u > "$INDEX_FILE"
+
+  if [ "$VERBOSE" = true ]; then
+    echo "Index built with $(wc -l < "$INDEX_FILE" | tr -d ' ') classes"
+  fi
+}
+
+# Ensure index is up to date
+ensure_index() {
+  local css_source
+  css_source=$(find_css_source)
+
+  if [ -z "$css_source" ]; then
+    printf '%s: %bN/A (no compiled CSS)%b\n' "$TOOL_NAME" "$GRAY" "$NC"
+    exit 0
+  fi
+
+  # Rebuild if index missing or older than CSS source
+  if [ ! -f "$INDEX_FILE" ] || [ "$css_source" -nt "$INDEX_FILE" ]; then
+    build_index "$css_source"
+  fi
+}
+
+# --- Class extraction from templates ---
+
+# Only allow characters valid in CSS class names (plus Tailwind variant colons and fraction slashes)
+VALID_CLASS_CHARS='a-zA-Z0-9_:/-'
+
+extract_classes_haml() {
+  local file="$1"
+
+  # Dot notation: %tag.class1.class2 or .class1.class2
+  grep -oE "(^|%[a-zA-Z0-9_-]+)(\\.[-${VALID_CLASS_CHARS}]+)+" "$file" 2>/dev/null | \
+    tr '.' '\n' | \
+    grep -vE '^(%|$)' || true
+
+  # class: "..." or class: '...' in Ruby hash attributes (skip interpolated)
+  grep -oE "class:[[:space:]]*[\"'][^\"']*[\"']" "$file" 2>/dev/null | \
+    grep -v '#{' | \
+    sed "s/class:[[:space:]]*[\"']//; s/[\"']//" | \
+    tr ' ' '\n' | \
+    grep -E "^[-${VALID_CLASS_CHARS}]+$" || true
+}
+
+extract_classes_erb() {
+  local file="$1"
+
+  # class="..." attributes (skip ERB interpolation)
+  grep -oE 'class="[^"]*"' "$file" 2>/dev/null | \
+    grep -v '<%' | \
+    sed 's/class="//; s/"//' | \
+    tr ' ' '\n' | \
+    grep -E "^[-${VALID_CLASS_CHARS}]+$" || true
+}
+
+extract_classes() {
+  local file="$1"
+  if [[ "$file" =~ \.haml$ ]]; then
+    extract_classes_haml "$file"
+  elif [[ "$file" =~ \.erb$ ]]; then
+    extract_classes_erb "$file"
+  fi
+}
+
+# --- Validation ---
+
+ensure_index
+
+HAS_ERRORS=false
+ERROR_OUTPUT=""
+
+for file in $FILTERED_FILES; do
+  if [ "$VERBOSE" = true ]; then
+    echo "Checking: $file"
+  fi
+
+  # Extract classes, deduplicate and sort for comm
+  EXTRACTED=$(extract_classes "$file" | sort -u)
+
+  if [ -z "$EXTRACTED" ]; then
+    continue
+  fi
+
+  # Remove allowlisted classes (fast set difference via comm on sorted inputs)
+  if [ -f "$ALLOWLIST_FILE" ]; then
+    EXTRACTED=$(comm -23 <(echo "$EXTRACTED") <(sort -u "$ALLOWLIST_FILE"))
+  fi
+
+  # Find classes not in the index (fast set difference via comm)
+  INVALID=$(comm -23 <(echo "$EXTRACTED") "$INDEX_FILE")
+
+  if [ -n "$INVALID" ]; then
+    HAS_ERRORS=true
+    # Format each invalid class with indent
+    FORMATTED=$(echo "$INVALID" | sed 's/^/  /')
+    ERROR_OUTPUT="${ERROR_OUTPUT}${file}:\n${FORMATTED}\n"
+  fi
+done
+
+if [ "$HAS_ERRORS" = true ]; then
+  printf 'Unrecognized CSS classes:\n%b' "$ERROR_OUTPUT" >&2
+  printf 'Add valid exceptions to %s\n' "$ALLOWLIST_FILE" >&2
+  printf '\n%s: %b✗%b\n' "$TOOL_NAME" "$RED" "$NC" >&2
+  exit 2
+else
+  printf '%s: %b✓%b\n' "$TOOL_NAME" "$GREEN" "$NC"
+  exit 0
+fi
