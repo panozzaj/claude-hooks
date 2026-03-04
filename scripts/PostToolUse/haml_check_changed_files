@@ -8,6 +8,8 @@
 
 set -e
 
+_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
+
 # Colors for output
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -15,16 +17,26 @@ RED='\033[0;31m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
-# Parse verbose flag
+# Parse flags
 VERBOSE=false
+SHOW_TIME=false
 FILES_ARG=()
 for arg in "$@"; do
   if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
     VERBOSE=true
+  elif [ "$arg" = "--time" ]; then
+    SHOW_TIME=true
   else
     FILES_ARG+=("$arg")
   fi
 done
+
+elapsed_suffix() {
+  if [ "$SHOW_TIME" = true ]; then
+    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
+    echo " $((end_ms - _HOOK_START_MS))ms"
+  fi
+}
 
 # Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
 CHANGED_FILES=""
@@ -56,7 +68,7 @@ else
 fi
 
 if [ -z "$CHANGED_FILES" ]; then
-  echo -e "haml: ${GRAY}N/A${NC}"
+  echo -e "haml: ${GRAY}N/A${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -80,7 +92,7 @@ done
 FILTERED_FILES="${FILTERED_FILES# }"
 
 if [ -z "$FILTERED_FILES" ]; then
-  echo -e "haml: ${GRAY}N/A${NC}"
+  echo -e "haml: ${GRAY}N/A${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -105,7 +117,7 @@ elif command -v check_haml_syntax &> /dev/null; then
 fi
 
 if [ -z "$CHECK_HAML_SCRIPT" ]; then
-  echo -e "${RED}✗ check_haml_syntax script not found in bin/scripts/ or PATH${NC}" >&2
+  echo -e "${RED}✗ check_haml_syntax script not found in bin/scripts/ or PATH${NC}$(elapsed_suffix)" >&2
   exit 1
 fi
 
@@ -119,7 +131,7 @@ set -e  # Re-enable exit on error
 
 if [ $HAML_STATUS -eq 0 ]; then
   # Success - HAML syntax valid (no auto-correction capability)
-  echo -e "haml: ${GREEN}✓${NC}"
+  echo -e "haml: ${GREEN}✓${NC}$(elapsed_suffix)"
   rm "$HAML_OUTPUT"
   exit 0
 else
@@ -127,7 +139,7 @@ else
   # Output to stderr for Claude to see and fix
   cat "$HAML_OUTPUT" >&2
   echo "" >&2
-  echo -e "haml: ${RED}✗${NC}" >&2
+  echo -e "haml: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$HAML_OUTPUT"
   exit 2
 fi

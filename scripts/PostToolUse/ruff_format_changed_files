@@ -9,22 +9,34 @@
 
 set -e
 
+_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
-# Parse verbose flag
+# Parse flags
 VERBOSE=false
+SHOW_TIME=false
 FILES_ARG=()
 for arg in "$@"; do
   if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
     VERBOSE=true
+  elif [ "$arg" = "--time" ]; then
+    SHOW_TIME=true
   else
     FILES_ARG+=("$arg")
   fi
 done
+
+elapsed_suffix() {
+  if [ "$SHOW_TIME" = true ]; then
+    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
+    echo " $((end_ms - _HOOK_START_MS))ms"
+  fi
+}
 
 # Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
 CHANGED_FILES=""
@@ -51,14 +63,14 @@ else
 fi
 
 if [ -z "$CHANGED_FILES" ]; then
-  echo -e "ruff-fmt: ${GRAY}N/A${NC}"
+  echo -e "ruff-fmt: ${GRAY}N/A${NC}$(elapsed_suffix)"
   exit 0
 fi
 
 # Check if file exists
 for file in $CHANGED_FILES; do
   if [ ! -f "$file" ]; then
-    echo -e "ruff-fmt: ${GRAY}N/A (file not found)${NC}"
+    echo -e "ruff-fmt: ${GRAY}N/A (file not found)${NC}$(elapsed_suffix)"
     exit 0
   fi
 done
@@ -69,7 +81,7 @@ if command -v uv &> /dev/null && [ -f "pyproject.toml" ]; then
 elif command -v ruff &> /dev/null; then
   RUFF_CMD="ruff"
 else
-  echo -e "ruff-fmt: ${GRAY}skipped (ruff not found)${NC}"
+  echo -e "ruff-fmt: ${GRAY}skipped (ruff not found)${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -101,7 +113,7 @@ for file in $CHANGED_FILES; do
 done
 
 if [ "$CHANGES_DETECTED" = false ]; then
-  echo -e "ruff-fmt: ${GREEN}✓${NC}"
+  echo -e "ruff-fmt: ${GREEN}✓${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -117,13 +129,13 @@ if [ $RUFF_STATUS -eq 0 ]; then
   echo "Ruff reformatted:"
   echo ""
   echo -e "$DIFF_OUTPUT"
-  echo -e "ruff-fmt: ${GREEN}✓${NC}"
+  echo -e "ruff-fmt: ${GREEN}✓${NC}$(elapsed_suffix)"
   rm "$RUFF_OUTPUT"
   exit 0
 else
   cat "$RUFF_OUTPUT" >&2
   echo "" >&2
-  echo -e "ruff-fmt: ${RED}✗${NC}" >&2
+  echo -e "ruff-fmt: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$RUFF_OUTPUT"
   exit 2
 fi

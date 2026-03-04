@@ -8,22 +8,34 @@
 
 set -e
 
+_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
-# Parse verbose flag
+# Parse flags
 VERBOSE=false
+SHOW_TIME=false
 FILES_ARG=()
 for arg in "$@"; do
   if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
     VERBOSE=true
+  elif [ "$arg" = "--time" ]; then
+    SHOW_TIME=true
   else
     FILES_ARG+=("$arg")
   fi
 done
+
+elapsed_suffix() {
+  if [ "$SHOW_TIME" = true ]; then
+    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
+    echo " $((end_ms - _HOOK_START_MS))ms"
+  fi
+}
 
 # Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
 CHANGED_FILES=""
@@ -51,7 +63,7 @@ else
 fi
 
 if [ -z "$CHANGED_FILES" ]; then
-  echo -e "clippy: ${GRAY}N/A${NC}"
+  echo -e "clippy: ${GRAY}N/A${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -79,7 +91,7 @@ fi
 CARGO_ROOT=$(find_cargo_root "$(cd "$FILE_DIR" && pwd)" || true)
 
 if [ -z "$CARGO_ROOT" ]; then
-  echo -e "clippy: ${GRAY}N/A (no Cargo.toml found)${NC}"
+  echo -e "clippy: ${GRAY}N/A (no Cargo.toml found)${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -118,7 +130,7 @@ if [ $CLIPPY_STATUS -eq 0 ]; then
     echo "$FILTERED_OUTPUT"
     echo ""
   fi
-  echo -e "clippy: ${GREEN}✓${NC}"
+  echo -e "clippy: ${GREEN}✓${NC}$(elapsed_suffix)"
   rm "$CLIPPY_OUTPUT"
   exit 0
 else
@@ -127,7 +139,7 @@ else
     echo "$FILTERED_OUTPUT" >&2
     echo "" >&2
   fi
-  echo -e "clippy: ${RED}✗${NC}" >&2
+  echo -e "clippy: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$CLIPPY_OUTPUT"
   exit 2
 fi

@@ -8,22 +8,34 @@
 
 set -e
 
+_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
-# Parse verbose flag
+# Parse flags
 VERBOSE=false
+SHOW_TIME=false
 FILES_ARG=()
 for arg in "$@"; do
   if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
     VERBOSE=true
+  elif [ "$arg" = "--time" ]; then
+    SHOW_TIME=true
   else
     FILES_ARG+=("$arg")
   fi
 done
+
+elapsed_suffix() {
+  if [ "$SHOW_TIME" = true ]; then
+    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
+    echo " $((end_ms - _HOOK_START_MS))ms"
+  fi
+}
 
 # Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
 CHANGED_FILES=""
@@ -58,7 +70,7 @@ fi
 TS_FILES=$(echo "$CHANGED_FILES" | tr ' ' '\n' | grep -E '\.(ts|tsx)$' || true)
 
 if [ -z "$TS_FILES" ]; then
-  echo -e "tsc: ${GRAY}N/A${NC}"
+  echo -e "tsc: ${GRAY}N/A${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -76,19 +88,19 @@ fi
 
 # Check if TypeScript is available
 if ! command -v npm &> /dev/null; then
-  echo -e "tsc: ${GRAY}skipped (npm not found)${NC}"
+  echo -e "tsc: ${GRAY}skipped (npm not found)${NC}$(elapsed_suffix)"
   exit 0
 fi
 
 # Check if package.json exists
 if [ ! -f "package.json" ]; then
-  echo -e "tsc: ${GRAY}skipped (no package.json)${NC}"
+  echo -e "tsc: ${GRAY}skipped (no package.json)${NC}$(elapsed_suffix)"
   exit 0
 fi
 
 # Check if tsconfig.json exists
 if [ ! -f "tsconfig.json" ]; then
-  echo -e "tsc: ${GRAY}skipped (no tsconfig.json)${NC}"
+  echo -e "tsc: ${GRAY}skipped (no tsconfig.json)${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -115,7 +127,7 @@ set -e
 
 if [ $TSC_STATUS -eq 0 ]; then
   # Exit 0: success - no type errors
-  echo -e "tsc: ${GREEN}✓${NC}"
+  echo -e "tsc: ${GREEN}✓${NC}$(elapsed_suffix)"
   rm "$TSC_OUTPUT"
   exit 0
 else
@@ -123,7 +135,7 @@ else
   # Filter output to only show errors related to changed files if possible
   cat "$TSC_OUTPUT" >&2
   echo "" >&2
-  echo -e "tsc: ${RED}✗${NC}" >&2
+  echo -e "tsc: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$TSC_OUTPUT"
   exit 2
 fi

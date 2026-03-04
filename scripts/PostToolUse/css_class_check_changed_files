@@ -20,6 +20,8 @@
 
 set -e
 
+_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
+
 TOOL_NAME="css-class-check"
 FILE_REGEX='\.(haml|erb)$'
 INDEX_FILE="tmp/css-classes.txt"
@@ -31,16 +33,26 @@ RED='\033[0;31m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
-# Parse verbose flag
+# Parse flags
 VERBOSE=false
+SHOW_TIME=false
 FILES_ARG=()
 for arg in "$@"; do
   if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
     VERBOSE=true
+  elif [ "$arg" = "--time" ]; then
+    SHOW_TIME=true
   else
     FILES_ARG+=("$arg")
   fi
 done
+
+elapsed_suffix() {
+  if [ "$SHOW_TIME" = true ]; then
+    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
+    echo " $((end_ms - _HOOK_START_MS))ms"
+  fi
+}
 
 # Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
 CHANGED_FILES=""
@@ -61,7 +73,7 @@ else
 fi
 
 if [ -z "$CHANGED_FILES" ]; then
-  printf '%s: %bN/A%b\n' "$TOOL_NAME" "$GRAY" "$NC"
+  printf '%s: %bN/A%b%s\n' "$TOOL_NAME" "$GRAY" "$NC" "$(elapsed_suffix)"
   exit 0
 fi
 
@@ -75,7 +87,7 @@ done
 FILTERED_FILES="${FILTERED_FILES# }"
 
 if [ -z "$FILTERED_FILES" ]; then
-  printf '%s: %bN/A%b\n' "$TOOL_NAME" "$GRAY" "$NC"
+  printf '%s: %bN/A%b%s\n' "$TOOL_NAME" "$GRAY" "$NC" "$(elapsed_suffix)"
   exit 0
 fi
 
@@ -136,7 +148,7 @@ ensure_index() {
   css_source=$(find_css_source)
 
   if [ -z "$css_source" ]; then
-    printf '%s: %bN/A (no compiled CSS)%b\n' "$TOOL_NAME" "$GRAY" "$NC"
+    printf '%s: %bN/A (no compiled CSS)%b%s\n' "$TOOL_NAME" "$GRAY" "$NC" "$(elapsed_suffix)"
     exit 0
   fi
 
@@ -225,9 +237,9 @@ done
 if [ "$HAS_ERRORS" = true ]; then
   printf 'Unrecognized CSS classes:\n%b' "$ERROR_OUTPUT" >&2
   printf 'Add valid exceptions to %s\n' "$ALLOWLIST_FILE" >&2
-  printf '\n%s: %b✗%b\n' "$TOOL_NAME" "$RED" "$NC" >&2
+  printf '\n%s: %b✗%b%s\n' "$TOOL_NAME" "$RED" "$NC" "$(elapsed_suffix)" >&2
   exit 2
 else
-  printf '%s: %b✓%b\n' "$TOOL_NAME" "$GREEN" "$NC"
+  printf '%s: %b✓%b%s\n' "$TOOL_NAME" "$GREEN" "$NC" "$(elapsed_suffix)"
   exit 0
 fi

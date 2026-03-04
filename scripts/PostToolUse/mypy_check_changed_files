@@ -8,22 +8,34 @@
 
 set -e
 
+_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
-# Parse verbose flag
+# Parse flags
 VERBOSE=false
+SHOW_TIME=false
 FILES_ARG=()
 for arg in "$@"; do
   if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
     VERBOSE=true
+  elif [ "$arg" = "--time" ]; then
+    SHOW_TIME=true
   else
     FILES_ARG+=("$arg")
   fi
 done
+
+elapsed_suffix() {
+  if [ "$SHOW_TIME" = true ]; then
+    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
+    echo " $((end_ms - _HOOK_START_MS))ms"
+  fi
+}
 
 # Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
 CHANGED_FILES=""
@@ -50,14 +62,14 @@ else
 fi
 
 if [ -z "$CHANGED_FILES" ]; then
-  echo -e "mypy: ${GRAY}N/A${NC}"
+  echo -e "mypy: ${GRAY}N/A${NC}$(elapsed_suffix)"
   exit 0
 fi
 
 # Check if file exists
 for file in $CHANGED_FILES; do
   if [ ! -f "$file" ]; then
-    echo -e "mypy: ${GRAY}N/A (file not found)${NC}"
+    echo -e "mypy: ${GRAY}N/A (file not found)${NC}$(elapsed_suffix)"
     exit 0
   fi
 done
@@ -68,7 +80,7 @@ if command -v uv &> /dev/null; then
 elif command -v mypy &> /dev/null; then
   MYPY_CMD="mypy"
 else
-  echo -e "mypy: ${GRAY}skipped (mypy not found)${NC}"
+  echo -e "mypy: ${GRAY}skipped (mypy not found)${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -94,14 +106,14 @@ if [ $MYPY_STATUS -eq 0 ]; then
     cat "$MYPY_OUTPUT"
     echo ""
   fi
-  echo -e "mypy: ${GREEN}✓${NC}"
+  echo -e "mypy: ${GREEN}✓${NC}$(elapsed_suffix)"
   rm "$MYPY_OUTPUT"
   exit 0
 else
   # Exit non-zero: issues found
   cat "$MYPY_OUTPUT" >&2
   echo "" >&2
-  echo -e "mypy: ${RED}✗${NC}" >&2
+  echo -e "mypy: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$MYPY_OUTPUT"
   exit 2
 fi

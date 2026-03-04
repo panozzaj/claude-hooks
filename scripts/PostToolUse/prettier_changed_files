@@ -12,22 +12,34 @@
 
 set -e
 
+_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
-# Parse verbose flag
+# Parse flags
 VERBOSE=false
+SHOW_TIME=false
 FILES_ARG=()
 for arg in "$@"; do
   if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
     VERBOSE=true
+  elif [ "$arg" = "--time" ]; then
+    SHOW_TIME=true
   else
     FILES_ARG+=("$arg")
   fi
 done
+
+elapsed_suffix() {
+  if [ "$SHOW_TIME" = true ]; then
+    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
+    echo " $((end_ms - _HOOK_START_MS))ms"
+  fi
+}
 
 # Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
 CHANGED_FILES=""
@@ -59,7 +71,7 @@ else
 fi
 
 if [ -z "$CHANGED_FILES" ]; then
-  echo -e "prettier: ${GRAY}N/A${NC}"
+  echo -e "prettier: ${GRAY}N/A${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -107,7 +119,7 @@ if [ $PRETTIER_STATUS -ne 0 ]; then
   echo "Prettier encountered errors:" >&2
   cat "$PRETTIER_OUTPUT" >&2
   echo "" >&2
-  echo -e "prettier: ${RED}✗${NC}" >&2
+  echo -e "prettier: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$PRETTIER_OUTPUT"
   exit 2
 fi
@@ -137,7 +149,7 @@ done
 if [ "$CHANGES_DETECTED" = false ]; then
   # No formatting changes needed
   rm "$PRETTIER_OUTPUT"
-  echo -e "prettier: ${GREEN}✓${NC}"
+  echo -e "prettier: ${GREEN}✓${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -155,7 +167,7 @@ if [ $WRITE_STATUS -eq 0 ]; then
   # Show the diffs
   echo -e "$DIFF_OUTPUT"
 
-  echo -e "prettier: ${GREEN}✓${NC}"
+  echo -e "prettier: ${GREEN}✓${NC}$(elapsed_suffix)"
   rm "$PRETTIER_OUTPUT" "$WRITE_OUTPUT"
   exit 0
 else
@@ -163,7 +175,7 @@ else
   echo "Prettier encountered errors:" >&2
   cat "$WRITE_OUTPUT" >&2
   echo "" >&2
-  echo -e "prettier: ${RED}✗${NC}" >&2
+  echo -e "prettier: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$PRETTIER_OUTPUT" "$WRITE_OUTPUT"
   exit 2
 fi

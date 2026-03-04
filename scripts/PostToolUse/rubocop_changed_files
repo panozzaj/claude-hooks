@@ -8,22 +8,34 @@
 
 set -e
 
+_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
-# Parse verbose flag
+# Parse flags
 VERBOSE=false
+SHOW_TIME=false
 FILES_ARG=()
 for arg in "$@"; do
   if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
     VERBOSE=true
+  elif [ "$arg" = "--time" ]; then
+    SHOW_TIME=true
   else
     FILES_ARG+=("$arg")
   fi
 done
+
+elapsed_suffix() {
+  if [ "$SHOW_TIME" = true ]; then
+    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
+    echo " $((end_ms - _HOOK_START_MS))ms"
+  fi
+}
 
 # Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
 CHANGED_FILES=""
@@ -58,7 +70,7 @@ else
 fi
 
 if [ -z "$CHANGED_FILES" ]; then
-  echo -e "rubocop: ${GRAY}N/A${NC}"
+  echo -e "rubocop: ${GRAY}N/A${NC}$(elapsed_suffix)"
   exit 0
 fi
 
@@ -109,10 +121,10 @@ if [ $RUBOCOP_STATUS -eq 0 ]; then
     # Show corrections for LLM feedback
     cat "$RUBOCOP_OUTPUT"
     echo ""
-    echo -e "rubocop: ${GREEN}✓${NC}"
+    echo -e "rubocop: ${GREEN}✓${NC}$(elapsed_suffix)"
   else
     # No changes needed - just show green check
-    echo -e "rubocop: ${GREEN}✓${NC}"
+    echo -e "rubocop: ${GREEN}✓${NC}$(elapsed_suffix)"
   fi
   rm "$RUBOCOP_OUTPUT"
   exit 0
@@ -121,7 +133,7 @@ else
   # Output to stderr for Claude to see and fix
   cat "$RUBOCOP_OUTPUT" >&2
   echo "" >&2
-  echo -e "rubocop: ${RED}✗${NC}" >&2
+  echo -e "rubocop: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$RUBOCOP_OUTPUT"
   exit 2
 fi
