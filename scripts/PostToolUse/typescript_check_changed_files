@@ -8,17 +8,6 @@
 
 set -e
 
-# Source nvm if available (needed for hooks which run in fresh shell)
-export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-if [ -s "$NVM_DIR/nvm.sh" ]; then
-  # shellcheck source=/dev/null
-  source "$NVM_DIR/nvm.sh" --no-use
-  # Use project's .nvmrc if present, otherwise default
-  if [ -f ".nvmrc" ]; then
-    nvm use --silent 2>/dev/null || true
-  fi
-fi
-
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -71,6 +60,18 @@ TS_FILES=$(echo "$CHANGED_FILES" | tr ' ' '\n' | grep -E '\.(ts|tsx)$' || true)
 if [ -z "$TS_FILES" ]; then
   echo -e "tsc: ${GRAY}N/A${NC}"
   exit 0
+fi
+
+# Source nvm if available (needed for hooks which run in fresh shell)
+# Deferred until after extension check to avoid ~100ms cost on non-TS files
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # shellcheck source=/dev/null
+  source "$NVM_DIR/nvm.sh" --no-use
+  # Use project's .nvmrc if present, otherwise default
+  if [ -f ".nvmrc" ]; then
+    nvm use --silent 2>/dev/null || true
+  fi
 fi
 
 # Check if TypeScript is available
