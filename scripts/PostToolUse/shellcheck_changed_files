@@ -7,63 +7,11 @@
 # See ../../docs/hook_interface.md for interface specification and exit code behavior
 
 set -e
-
-_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
-
-# Colors for output
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-GRAY='\033[0;90m'
-NC='\033[0m' # No Color
-
-# Parse flags
-VERBOSE=false
-SHOW_TIME=false
-FILES_ARG=()
-for arg in "$@"; do
-  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
-    VERBOSE=true
-  elif [ "$arg" = "--time" ]; then
-    SHOW_TIME=true
-  else
-    FILES_ARG+=("$arg")
-  fi
-done
-
-elapsed_suffix() {
-  if [ "$SHOW_TIME" = true ]; then
-    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
-    echo " $((end_ms - _HOOK_START_MS))ms"
-  fi
-}
-
-# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
-CHANGED_FILES=""
-
-# Check if we have command-line file arguments (for direct invocation / testing)
-if [ ${#FILES_ARG[@]} -gt 0 ]; then
-  CHANGED_FILES="${FILES_ARG[*]}"
-else
-  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
-  if [ ! -t 0 ]; then
-    HOOK_JSON=$(cat)
-
-    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
-
-    if [ -z "$FILE_PATH" ]; then
-      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
-    fi
-
-    if [ -n "$FILE_PATH" ]; then
-      CHANGED_FILES="$FILE_PATH"
-    fi
-  fi
-fi
-
-if [ -z "$CHANGED_FILES" ]; then
-  echo -e "shellcheck: ${GRAY}N/A${NC}$(elapsed_suffix)"
-  exit 0
-fi
+HOOK_NAME="shellcheck"
+# Accept all files, then filter to shell scripts by extension or shebang below
+FILE_PATTERN='.'
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/hook_common.bash"
 
 # Filter to only shell script files
 SHELL_FILES=()
@@ -84,14 +32,12 @@ for file in $CHANGED_FILES; do
 done
 
 if [ ${#SHELL_FILES[@]} -eq 0 ]; then
-  echo -e "shellcheck: ${GRAY}N/A${NC}$(elapsed_suffix)"
-  exit 0
+  hook_status na
 fi
 
 # Check that shellcheck is available
 if ! command -v shellcheck &> /dev/null; then
-  echo -e "shellcheck: ${GRAY}N/A (not installed)${NC}$(elapsed_suffix)"
-  exit 0
+  hook_status na "not installed"
 fi
 
 if [ "$VERBOSE" = true ]; then
@@ -111,14 +57,11 @@ SHELLCHECK_STATUS=$?
 set -e
 
 if [ $SHELLCHECK_STATUS -eq 0 ]; then
-  echo -e "shellcheck: ${GREEN}✓${NC}$(elapsed_suffix)"
   rm "$SHELLCHECK_OUTPUT"
-  exit 0
+  hook_status pass
 else
-  # ShellCheck found issues (exit 1) - these require manual fixes
   cat "$SHELLCHECK_OUTPUT" >&2
   echo "" >&2
-  echo -e "shellcheck: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$SHELLCHECK_OUTPUT"
-  exit 2
+  hook_status fail
 fi

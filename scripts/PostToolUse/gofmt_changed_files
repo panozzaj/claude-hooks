@@ -7,76 +7,17 @@
 # See ../../docs/hook_interface.md for interface specification and exit code behavior
 
 set -e
+HOOK_NAME="gofmt"
+FILE_PATTERN='\.go$'
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/hook_common.bash"
 
-_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
-
-# Colors for output
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-GRAY='\033[0;90m'
-NC='\033[0m' # No Color
-
-# Parse flags
-VERBOSE=false
-SHOW_TIME=false
-FILES_ARG=()
-for arg in "$@"; do
-  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
-    VERBOSE=true
-  elif [ "$arg" = "--time" ]; then
-    SHOW_TIME=true
-  else
-    FILES_ARG+=("$arg")
-  fi
-done
-
-elapsed_suffix() {
-  if [ "$SHOW_TIME" = true ]; then
-    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
-    echo " $((end_ms - _HOOK_START_MS))ms"
-  fi
-}
-
-# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
-CHANGED_FILES=""
-
-# Check if we have command-line file arguments (for direct invocation / testing)
-if [ ${#FILES_ARG[@]} -gt 0 ]; then
-  CHANGED_FILES="${FILES_ARG[*]}"
-else
-  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
-  if [ ! -t 0 ]; then
-    HOOK_JSON=$(cat)
-
-    # Extract file_path from JSON
-    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
-
-    if [ -z "$FILE_PATH" ]; then
-      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
-    fi
-
-    # Only check Go files
-    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.go$ ]]; then
-      CHANGED_FILES="$FILE_PATH"
-    fi
-  fi
-fi
-
-if [ -z "$CHANGED_FILES" ]; then
-  echo -e "gofmt: ${GRAY}N/A${NC}$(elapsed_suffix)"
-  exit 0
-fi
-
-# Check if gofmt is available
 if ! command -v gofmt &> /dev/null; then
-  echo -e "gofmt: ${GRAY}N/A (gofmt not found)${NC}$(elapsed_suffix)"
-  exit 0
+  hook_status na "gofmt not found"
 fi
 
-# Verify file exists
 if [ ! -f "$CHANGED_FILES" ]; then
-  echo -e "gofmt: ${GRAY}N/A (file not found)${NC}$(elapsed_suffix)"
-  exit 0
+  hook_status na "file not found"
 fi
 
 if [ "$VERBOSE" = true ]; then
@@ -100,14 +41,11 @@ if [ $FMT_STATUS -eq 0 ]; then
     cat "$FMT_OUTPUT"
     echo ""
   fi
-  echo -e "gofmt: ${GREEN}✓${NC}$(elapsed_suffix)"
   rm "$FMT_OUTPUT"
-  exit 0
+  hook_status pass
 else
-  # Error running gofmt
   cat "$FMT_OUTPUT" >&2
   echo "" >&2
-  echo -e "gofmt: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$FMT_OUTPUT"
-  exit 2
+  hook_status fail
 fi

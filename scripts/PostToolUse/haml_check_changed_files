@@ -7,70 +7,10 @@
 # See ../../docs/hook_interface.md for interface specification and exit code behavior
 
 set -e
-
-_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
-
-# Colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-GRAY='\033[0;90m'
-NC='\033[0m' # No Color
-
-# Parse flags
-VERBOSE=false
-SHOW_TIME=false
-FILES_ARG=()
-for arg in "$@"; do
-  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
-    VERBOSE=true
-  elif [ "$arg" = "--time" ]; then
-    SHOW_TIME=true
-  else
-    FILES_ARG+=("$arg")
-  fi
-done
-
-elapsed_suffix() {
-  if [ "$SHOW_TIME" = true ]; then
-    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
-    echo " $((end_ms - _HOOK_START_MS))ms"
-  fi
-}
-
-# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
-CHANGED_FILES=""
-
-# Check if we have command-line file arguments (for direct invocation / testing)
-if [ ${#FILES_ARG[@]} -gt 0 ]; then
-  CHANGED_FILES="${FILES_ARG[*]}"
-else
-  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
-  # Check if STDIN is not a terminal (i.e., data is being piped/redirected)
-  if [ ! -t 0 ]; then
-    # Read all of STDIN
-    HOOK_JSON=$(cat)
-
-    # Extract file_path from JSON using grep and sed
-    # Handles both tool_input.file_path and tool_response.filePath
-    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
-
-    if [ -z "$FILE_PATH" ]; then
-      # Try alternative field name
-      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
-    fi
-
-    # Only check HAML files
-    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.haml$ ]]; then
-      CHANGED_FILES="$FILE_PATH"
-    fi
-  fi
-fi
-
-if [ -z "$CHANGED_FILES" ]; then
-  echo -e "haml: ${GRAY}N/A${NC}$(elapsed_suffix)"
-  exit 0
-fi
+HOOK_NAME="haml"
+FILE_PATTERN='\.haml$'
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/hook_common.bash"
 
 if [ "$VERBOSE" = true ]; then
   echo "Changed HAML files detected:"
@@ -84,6 +24,7 @@ for file in $CHANGED_FILES; do
   if [ -f "$file" ]; then
     FILTERED_FILES="$FILTERED_FILES $file"
   elif [ "$VERBOSE" = true ]; then
+    YELLOW='\033[0;33m'
     echo -e "${YELLOW}Skipping non-existent file: $file${NC}"
   fi
 done
@@ -92,8 +33,7 @@ done
 FILTERED_FILES="${FILTERED_FILES# }"
 
 if [ -z "$FILTERED_FILES" ]; then
-  echo -e "haml: ${GRAY}N/A${NC}$(elapsed_suffix)"
-  exit 0
+  hook_status na
 fi
 
 if [ "$VERBOSE" = true ]; then
@@ -117,29 +57,23 @@ elif command -v check_haml_syntax &> /dev/null; then
 fi
 
 if [ -z "$CHECK_HAML_SCRIPT" ]; then
-  echo -e "${RED}✗ check_haml_syntax script not found in bin/scripts/ or PATH${NC}$(elapsed_suffix)" >&2
-  exit 1
+  echo -e "${RED}check_haml_syntax script not found in bin/scripts/ or PATH${NC}" >&2
+  hook_status fail
 fi
 
 # Run HAML syntax check
-# Capture output to provide consistent formatting
 HAML_OUTPUT=$(mktemp)
-set +e  # Temporarily disable exit on error to capture the exit code
+set +e
 $CHECK_HAML_SCRIPT "$FILTERED_FILES" > "$HAML_OUTPUT" 2>&1
 HAML_STATUS=$?
-set -e  # Re-enable exit on error
+set -e
 
 if [ $HAML_STATUS -eq 0 ]; then
-  # Success - HAML syntax valid (no auto-correction capability)
-  echo -e "haml: ${GREEN}✓${NC}$(elapsed_suffix)"
   rm "$HAML_OUTPUT"
-  exit 0
+  hook_status pass
 else
-  # Exit 2: blocking error - syntax errors found
-  # Output to stderr for Claude to see and fix
   cat "$HAML_OUTPUT" >&2
   echo "" >&2
-  echo -e "haml: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$HAML_OUTPUT"
-  exit 2
+  hook_status fail
 fi

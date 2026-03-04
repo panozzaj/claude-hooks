@@ -207,5 +207,5 @@ MOCK_EOF
   [ "$status" -eq 0 ]
 
   output_stripped=$(echo "$output" | strip_colors)
-  [[ "$output_stripped" == "ruff-fmt: skipped (ruff not found)" ]]
+  [[ "$output_stripped" == "ruff-fmt: N/A (ruff not found)" ]]
 }

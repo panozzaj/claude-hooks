@@ -11,69 +11,10 @@
 # See ../../docs/hook_interface.md for interface specification and exit code behavior
 
 set -e
-
-_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
-
-# Colors for output
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-GRAY='\033[0;90m'
-NC='\033[0m' # No Color
-
-# Parse flags
-VERBOSE=false
-SHOW_TIME=false
-FILES_ARG=()
-for arg in "$@"; do
-  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
-    VERBOSE=true
-  elif [ "$arg" = "--time" ]; then
-    SHOW_TIME=true
-  else
-    FILES_ARG+=("$arg")
-  fi
-done
-
-elapsed_suffix() {
-  if [ "$SHOW_TIME" = true ]; then
-    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
-    echo " $((end_ms - _HOOK_START_MS))ms"
-  fi
-}
-
-# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
-CHANGED_FILES=""
-
-# Check if we have command-line file arguments (for direct invocation / testing)
-if [ ${#FILES_ARG[@]} -gt 0 ]; then
-  CHANGED_FILES="${FILES_ARG[*]}"
-else
-  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
-  # Check if STDIN is not a terminal (i.e., data is being piped/redirected)
-  if [ ! -t 0 ]; then
-    # Read all of STDIN
-    HOOK_JSON=$(cat)
-
-    # Extract file_path from JSON using grep and sed
-    # Handles both tool_input.file_path and tool_response.filePath
-    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
-
-    if [ -z "$FILE_PATH" ]; then
-      # Try alternative field name
-      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
-    fi
-
-    # Only check files prettier handles (js, jsx, ts, tsx, json, css, scss, md, etc.)
-    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.(js|jsx|ts|tsx|json|css|scss|less|md|markdown|html|yml|yaml)$ ]]; then
-      CHANGED_FILES="$FILE_PATH"
-    fi
-  fi
-fi
-
-if [ -z "$CHANGED_FILES" ]; then
-  echo -e "prettier: ${GRAY}N/A${NC}$(elapsed_suffix)"
-  exit 0
-fi
+HOOK_NAME="prettier"
+FILE_PATTERN='\.(js|jsx|ts|tsx|json|css|scss|less|md|markdown|html|yml|yaml)$'
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/hook_common.bash"
 
 # Source nvm if available (needed for hooks which run in fresh shell)
 # Deferred until after extension check to avoid ~100ms cost on non-matching files
@@ -81,7 +22,6 @@ export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 if [ -s "$NVM_DIR/nvm.sh" ]; then
   # shellcheck source=/dev/null
   source "$NVM_DIR/nvm.sh" --no-use
-  # Use project's .nvmrc if present, otherwise default
   if [ -f ".nvmrc" ]; then
     nvm use --silent 2>/dev/null || true
   fi
@@ -103,25 +43,20 @@ if [ "$VERBOSE" = true ]; then
 fi
 
 # Run Prettier with auto-format
-# Use prettier's built-in stdout output to generate diffs
 PRETTIER_OUTPUT=$(mktemp)
 
-# Use 'set +e' temporarily to capture exit status without script failing
 set +e
 
 # Run prettier without --write to get formatted output on stdout
-# This allows us to diff against original before making changes
 $PRETTIER_CMD "$CHANGED_FILES" > "$PRETTIER_OUTPUT" 2>&1
 PRETTIER_STATUS=$?
 
 if [ $PRETTIER_STATUS -ne 0 ]; then
-  # Exit 2: blocking error - syntax errors prevent formatting
   echo "Prettier encountered errors:" >&2
   cat "$PRETTIER_OUTPUT" >&2
   echo "" >&2
-  echo -e "prettier: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$PRETTIER_OUTPUT"
-  exit 2
+  hook_status fail
 fi
 
 # Compare formatted output with original file to detect changes
@@ -130,14 +65,11 @@ DIFF_OUTPUT=""
 
 for file in $CHANGED_FILES; do
   if [ -f "$file" ]; then
-    # Get formatted version for this file (capture only stdout, discard stderr noise)
     FORMATTED=$(mktemp)
     $PRETTIER_CMD "$file" > "$FORMATTED" 2>/dev/null
 
-    # Check if file would change
     if ! diff -q "$file" "$FORMATTED" > /dev/null 2>&1; then
       CHANGES_DETECTED=true
-      # Store the diff for this file with minimal context (-U1 = 1 line instead of 3)
       FILE_DIFF=$(diff -U1 "$file" "$FORMATTED" | tail -n +3 || true)
       DIFF_OUTPUT="${DIFF_OUTPUT}${file}\n${FILE_DIFF}\n\n"
     fi
@@ -147,10 +79,8 @@ for file in $CHANGED_FILES; do
 done
 
 if [ "$CHANGES_DETECTED" = false ]; then
-  # No formatting changes needed
   rm "$PRETTIER_OUTPUT"
-  echo -e "prettier: ${GREEN}✓${NC}$(elapsed_suffix)"
-  exit 0
+  hook_status pass
 fi
 
 # Apply formatting with --write
@@ -160,22 +90,15 @@ WRITE_STATUS=$?
 set -e
 
 if [ $WRITE_STATUS -eq 0 ]; then
-  # Exit 0: success - show what was formatted
   echo "Prettier reformatted:"
   echo ""
-
-  # Show the diffs
   echo -e "$DIFF_OUTPUT"
-
-  echo -e "prettier: ${GREEN}✓${NC}$(elapsed_suffix)"
   rm "$PRETTIER_OUTPUT" "$WRITE_OUTPUT"
-  exit 0
+  hook_status pass
 else
-  # Exit 2: blocking error - write failed
   echo "Prettier encountered errors:" >&2
   cat "$WRITE_OUTPUT" >&2
   echo "" >&2
-  echo -e "prettier: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$PRETTIER_OUTPUT" "$WRITE_OUTPUT"
-  exit 2
+  hook_status fail
 fi

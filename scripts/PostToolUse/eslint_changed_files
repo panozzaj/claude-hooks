@@ -7,69 +7,10 @@
 # See ../../docs/hook_interface.md for interface specification and exit code behavior
 
 set -e
-
-_HOOK_START_MS=$(python3 -c 'import time; print(int(time.time()*1000))')
-
-# Colors for output
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-GRAY='\033[0;90m'
-NC='\033[0m' # No Color
-
-# Parse flags
-VERBOSE=false
-SHOW_TIME=false
-FILES_ARG=()
-for arg in "$@"; do
-  if [ "$arg" = "-v" ] || [ "$arg" = "--verbose" ]; then
-    VERBOSE=true
-  elif [ "$arg" = "--time" ]; then
-    SHOW_TIME=true
-  else
-    FILES_ARG+=("$arg")
-  fi
-done
-
-elapsed_suffix() {
-  if [ "$SHOW_TIME" = true ]; then
-    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
-    echo " $((end_ms - _HOOK_START_MS))ms"
-  fi
-}
-
-# Determine file to check: either from STDIN JSON (Claude Code hook) or command-line args
-CHANGED_FILES=""
-
-# Check if we have command-line file arguments (for direct invocation / testing)
-if [ ${#FILES_ARG[@]} -gt 0 ]; then
-  CHANGED_FILES="${FILES_ARG[*]}"
-else
-  # No args - check if we're receiving JSON from STDIN (Claude Code hook mode)
-  # Check if STDIN is not a terminal (i.e., data is being piped/redirected)
-  if [ ! -t 0 ]; then
-    # Read all of STDIN
-    HOOK_JSON=$(cat)
-
-    # Extract file_path from JSON using grep and sed
-    # Handles both tool_input.file_path and tool_response.filePath
-    FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
-
-    if [ -z "$FILE_PATH" ]; then
-      # Try alternative field name
-      FILE_PATH=$(echo "$HOOK_JSON" | grep -o '"filePath"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"filePath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
-    fi
-
-    # Only check JavaScript/TypeScript files
-    if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" =~ \.(js|jsx|ts|tsx)$ ]]; then
-      CHANGED_FILES="$FILE_PATH"
-    fi
-  fi
-fi
-
-if [ -z "$CHANGED_FILES" ]; then
-  echo -e "eslint: ${GRAY}N/A${NC}$(elapsed_suffix)"
-  exit 0
-fi
+HOOK_NAME="eslint"
+FILE_PATTERN='\.(js|jsx|ts|tsx)$'
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/hook_common.bash"
 
 # Source nvm if available (needed for hooks which run in fresh shell)
 # Deferred until after extension check to avoid ~100ms cost on non-JS files
@@ -77,7 +18,6 @@ export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 if [ -s "$NVM_DIR/nvm.sh" ]; then
   # shellcheck source=/dev/null
   source "$NVM_DIR/nvm.sh" --no-use
-  # Use project's .nvmrc if present, otherwise default
   if [ -f ".nvmrc" ]; then
     nvm use --silent 2>/dev/null || true
   fi
@@ -108,10 +48,8 @@ if [ "$VERBOSE" = true ]; then
 fi
 
 # Run ESLint with auto-fix
-# Capture output to provide detailed feedback
 ESLINT_OUTPUT=$(mktemp)
 
-# Use 'set +e' temporarily to capture exit status without script failing
 set +e
 $ESLINT_CMD --fix "$CHANGED_FILES" > "$ESLINT_OUTPUT" 2>&1
 ESLINT_STATUS=$?
@@ -128,25 +66,15 @@ filter_yarn_noise() {
 }
 
 if [ $ESLINT_STATUS -eq 0 ]; then
-  # Exit 0: success (with or without auto-corrections)
-  # Check if there was any output (issues found and fixed, or warnings)
   if [ -s "$ESLINT_OUTPUT" ]; then
-    # Show what was found/fixed for LLM feedback (filter noise)
     cat "$ESLINT_OUTPUT" | filter_yarn_noise
     echo ""
-    echo -e "eslint: ${GREEN}✓${NC}$(elapsed_suffix)"
-  else
-    # No issues - just show green check
-    echo -e "eslint: ${GREEN}✓${NC}$(elapsed_suffix)"
   fi
   rm "$ESLINT_OUTPUT"
-  exit 0
+  hook_status pass
 else
-  # Exit 2: blocking error - unfixable issues
-  # Output to stderr for Claude to see and fix (filter noise)
   cat "$ESLINT_OUTPUT" | filter_yarn_noise >&2
   echo "" >&2
-  echo -e "eslint: ${RED}✗${NC}$(elapsed_suffix)" >&2
   rm "$ESLINT_OUTPUT"
-  exit 2
+  hook_status fail
 fi
