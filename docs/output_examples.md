@@ -6,12 +6,12 @@ This document shows the actual output you'll see from the linter hook scripts in
 
 All scripts follow a consistent four-tier output pattern:
 
-| Scenario | Output | Exit Code | Color |
-|----------|--------|-----------|-------|
-| No relevant files | `toolname: N/A` | 0 | Gray |
-| All clean | `toolname: ✓` | 0 | Green |
-| Auto-fixed | `[linter output]`<br>`toolname: ✓` | 0 | Green |
-| Manual fixes needed | `[linter output]`<br>`toolname: ✗` | 2 | Red |
+| Scenario            | Output                             | Exit Code | Color |
+| ------------------- | ---------------------------------- | --------- | ----- |
+| No relevant files   | `toolname: N/A`                    | 0         | Gray  |
+| All clean           | `toolname: ✓`                      | 0         | Green |
+| Auto-fixed          | `[linter output]`<br>`toolname: ✓` | 0         | Green |
+| Manual fixes needed | `[linter output]`<br>`toolname: ✗` | 2         | Red   |
 
 ## Example Outputs
 
@@ -50,6 +50,7 @@ eslint: ✓
 When linters fix issues automatically:
 
 **RuboCop:**
+
 ```
 Inspecting 2 files
 CC
@@ -65,6 +66,7 @@ rubocop: ✓
 ```
 
 **ESLint:**
+
 ```
 /path/to/app.js
   5:1  error  Expected indentation of 2 spaces but found 4  indent
@@ -84,6 +86,7 @@ eslint: ✓
 When issues can't be auto-corrected:
 
 **RuboCop:**
+
 ```
 Inspecting 2 files
 .C
@@ -100,6 +103,7 @@ rubocop: ✗
 ```
 
 **ESLint:**
+
 ```
 /path/to/app.js
   10:5  error  'unusedVar' is assigned a value but never used  no-unused-vars
@@ -110,6 +114,7 @@ eslint: ✗
 ```
 
 **HAML:**
+
 ```
 Syntax error in app/views/users/show.html.haml:
   Illegal nesting: nesting within plain text is illegal.
@@ -134,6 +139,7 @@ stylelint: N/A
 ```
 
 This tells you:
+
 - Ruby files: clean ✓
 - HAML files: none changed (N/A)
 - JavaScript: clean ✓
@@ -164,6 +170,18 @@ rubocop: ✓
 **Use case:** Debugging why a file isn't being checked.
 
 ---
+
+## Timing Mode
+
+Add `--time` flag to show elapsed time on the status line:
+
+```
+rubocop: ✓ 245ms
+eslint: ✓ 102ms
+prettier: N/A 12ms
+```
+
+Useful for benchmarking hook performance.
 
 ## Color Reference
 

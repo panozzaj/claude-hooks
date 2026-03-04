@@ -7,13 +7,13 @@ automatic fixing and provide the LLM with non-blocking feedback.
 
 I had the following design principles:
 
- - Comply with the Claude Code hook interface specification
- - Make it modular: easily add and configure linters for different projects
- - Provide minimal output to save tokens
- - Auto-fix issues when possible, and provide that output to the LLM to reduce future churn
- - Output errors when not auto-correctable, so that the LLM can fix
- - Use plain `bash` for maximum compatibility and minimal setup
-   - Tested with [`bats-core`](https://github.com/bats-core/bats-core)
+- Comply with the Claude Code hook interface specification
+- Make it modular: easily add and configure linters for different projects
+- Provide minimal output to save tokens
+- Auto-fix issues when possible, and provide that output to the LLM to reduce future churn
+- Output errors when not auto-correctable, so that the LLM can fix
+- Use plain `bash` for maximum compatibility and minimal setup
+  - Tested with [`bats-core`](https://github.com/bats-core/bats-core)
 
 ## Scripts
 
@@ -29,6 +29,7 @@ All PostToolUse hook scripts are in the `scripts/PostToolUse/` directory:
 
 - **cargo_clippy_changed_files** - Cargo clippy with auto-fix
 - **cargo_fmt_changed_files** - Cargo fmt formatting
+- **css_class_check_changed_files** - CSS class validation for HAML/ERB templates
 - **eslint_changed_files** - ESLint with auto-fix
 - **gofmt_changed_files** - Go formatting
 - **haml_check_changed_files** - HAML syntax validation
@@ -149,6 +150,7 @@ Stop hooks fire after Claude finishes responding. They can block Claude from sto
 ```
 
 **Prerequisites:** `stop_diy_check` and `stop_auto_commit` require `jq`, the `llm` CLI tool, and an ollama model (default: `gemma3:4b`). `stop_stale_build` requires only `jq`. Install with:
+
 ```bash
 brew install jq
 pip install llm          # for stop_diy_check, stop_auto_commit
@@ -195,7 +197,6 @@ fi
 See [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks#persisting-environment-variables) for more details.
 
 Note: you'll have to restart Claude Code for changes to take effect. You can use a [reload command](https://panozzaj.com/blog/2026/02/07/building-a-reload-command-for-claude-code/) to restart without losing session context.
-
 
 ## Output Format
 
@@ -252,6 +253,7 @@ Debug helper scripts are in the `scripts/debug/` directory:
 All scripts conform to the Claude Code hook interface specification.
 
 **See [docs/hook_interface.md](docs/hook_interface.md) for complete details on:**
+
 - Input formats (JSON STDIN and command-line args)
 - Exit code behavior
 - Output format conventions

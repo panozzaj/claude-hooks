@@ -31,7 +31,7 @@ Scripts should extract the file path from either `inputs.file_path` or `response
 ### Direct Invocation
 
 ```bash
-script_name [-v|--verbose] [file1 file2 ...]
+script_name [-v|--verbose] [--time] [file1 file2 ...]
 ```
 
 ## Exit Codes
@@ -39,10 +39,12 @@ script_name [-v|--verbose] [file1 file2 ...]
 Scripts must follow this exit code convention:
 
 - **Exit 0** - Success
+
   - stdout shown to user in transcript mode (Ctrl-O)
   - Use for: clean code or auto-corrected issues
 
 - **Exit 2** - Blocking error
+
   - stderr fed back to Claude immediately for automatic processing
   - Use for: issues requiring manual fixes
 
@@ -66,9 +68,17 @@ tool: ✗
 ## File Filtering
 
 Scripts should:
+
 - Check file extensions via regex in hook mode
 - Only process files relevant to their tool (e.g., `.rb` for RuboCop, `.css/.scss` for Stylelint)
 - Output `tool: N/A` for irrelevant files
+
+## Shared Boilerplate
+
+All PostToolUse hooks source `scripts/PostToolUse/hook_common.bash` which
+provides flag parsing, JSON stdin extraction, file pattern matching, color
+variables, `elapsed_suffix()`, and `hook_status()`. See the CLAUDE.md
+"Writing New Hooks" section for a template.
 
 ## Reference Implementation
 

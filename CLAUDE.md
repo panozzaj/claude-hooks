@@ -9,16 +9,47 @@ See README.md for full documentation on the hook scripts, usage, and Claude Code
 When auto-fixes are applied, scripts should provide detailed feedback about what was changed so the LLM can learn from corrections.
 
 **Gold standard: RuboCop**
+
 - Shows specific errors with line numbers
 - Indicates which offenses were `[Corrected]`
 - Automatically fixes what it can
 - Shows errors for unfixable issues
 
 All scripts should strive to:
+
 1. Show what was wrong (specific errors/warnings with line numbers)
 2. Indicate what was auto-fixed
 3. Report unfixable issues with clear error messages
 4. Provide enough context for the LLM to learn from the corrections
+
+## Writing New Hooks
+
+All PostToolUse hooks use `scripts/PostToolUse/hook_common.bash` for shared
+boilerplate. To create a new hook, start with this template:
+
+```bash
+#!/bin/bash
+set -e
+HOOK_NAME="toolname"
+FILE_PATTERN='\.ext$'
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/hook_common.bash"
+
+# At this point, CHANGED_FILES is non-empty (or the script already exited N/A).
+# VERBOSE, SHOW_TIME, GREEN, RED, GRAY, NC are available.
+# Use hook_status pass|fail|na to exit with consistent formatting.
+
+# ... tool-specific logic ...
+
+hook_status pass
+```
+
+`hook_common.bash` provides: flag parsing (`-v`/`--verbose`, `--time`), JSON
+stdin extraction, file pattern matching, color variables, `elapsed_suffix()`,
+and `hook_status()`. See the file header for full API docs.
+
+For hooks that need to accept all files and filter later (e.g. shellcheck
+checks shebangs), use `FILE_PATTERN='.'`.
 
 ## Directory Structure
 
@@ -35,8 +66,10 @@ claude-hooks/                           # This repository (local dev)
 │   ├── PreToolUse/                     # PreToolUse hook scripts
 │   │   └── jj_snapshot                # Snapshot jj working copy before changes
 │   ├── PostToolUse/                    # PostToolUse hook scripts
+│   │   ├── hook_common.bash           # Shared boilerplate (sourced by all hooks)
 │   │   ├── cargo_clippy_changed_files
 │   │   ├── cargo_fmt_changed_files
+│   │   ├── css_class_check_changed_files
 │   │   ├── eslint_changed_files
 │   │   ├── gofmt_changed_files
 │   │   ├── haml_check_changed_files
