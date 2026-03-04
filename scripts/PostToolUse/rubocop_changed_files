@@ -62,13 +62,20 @@ if [ -z "$CHANGED_FILES" ]; then
   exit 0
 fi
 
-# Determine RuboCop command
+# Determine RuboCop command - prefer --server mode (~0.25s warm) over cold rubocop (~1.0s)
+# --server is built into RuboCop 1.31+ and keeps a warm background process
+# To disable: set NO_RUBOCOP_SERVER=1 or touch ./tmp/no-rubocop-server
+USE_SERVER=""
+if [ -z "$NO_RUBOCOP_SERVER" ] && [ ! -f "./tmp/no-rubocop-server" ]; then
+  USE_SERVER="--server"
+fi
+
 if [ -x "./bin/rubocop" ]; then
-  RUBOCOP_CMD="./bin/rubocop"
+  RUBOCOP_CMD="./bin/rubocop $USE_SERVER"
 elif command -v bundle &> /dev/null; then
-  RUBOCOP_CMD="bundle exec rubocop"
+  RUBOCOP_CMD="bundle exec rubocop $USE_SERVER"
 else
-  RUBOCOP_CMD="rubocop"
+  RUBOCOP_CMD="rubocop $USE_SERVER"
 fi
 
 if [ "$VERBOSE" = true ]; then
