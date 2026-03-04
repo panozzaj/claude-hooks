@@ -8,6 +8,9 @@ setup() {
   # Store path to the script being tested
   SCRIPT_PATH="$SCRIPTS_DIR/eslint_changed_files"
 
+  # Disable eslint_d so tests use the mock eslint
+  export NO_ESLINT_D=1
+
   # Create mock eslint command in node_modules/.bin (where the script looks first)
   MOCK_DIR="$TEST_REPO/node_modules/.bin"
   mkdir -p "$MOCK_DIR"
@@ -153,4 +156,93 @@ EOF
   [[ "$args" =~ "--fix" ]]
 
   rm -f /tmp/eslint_args.txt
+}
+
+# --- eslint_d daemon tests ---
+
+@test "uses eslint_d when available and not disabled" {
+  unset NO_ESLINT_D
+
+  # Create a mock eslint_d
+  cat > "$MOCK_DIR/eslint_d" << 'EOF'
+#!/bin/bash
+echo "eslint_d called with: $@" > /tmp/eslint_d_args.txt
+exit 0
+EOF
+  chmod +x "$MOCK_DIR/eslint_d"
+
+  echo "console.log('test');" > "app.js"
+
+  run "$SCRIPT_PATH" app.js
+
+  [ "$status" -eq 0 ]
+  [ -f /tmp/eslint_d_args.txt ]
+  args=$(cat /tmp/eslint_d_args.txt)
+  [[ "$args" =~ "--fix" ]]
+  [[ "$args" =~ "app.js" ]]
+
+  rm -f /tmp/eslint_d_args.txt
+}
+
+@test "skips eslint_d when NO_ESLINT_D is set" {
+  export NO_ESLINT_D=1
+
+  # Create both mocks
+  cat > "$MOCK_DIR/eslint_d" << 'EOF'
+#!/bin/bash
+echo "eslint_d called" > /tmp/eslint_d_called.txt
+exit 0
+EOF
+  chmod +x "$MOCK_DIR/eslint_d"
+  create_eslint_mock 0 ""
+
+  echo "console.log('test');" > "app.js"
+
+  run "$SCRIPT_PATH" app.js
+
+  [ "$status" -eq 0 ]
+  # eslint_d should NOT have been called
+  [ ! -f /tmp/eslint_d_called.txt ]
+
+  rm -f /tmp/eslint_d_called.txt
+}
+
+@test "skips eslint_d when ./tmp/no-eslint-d exists" {
+  unset NO_ESLINT_D
+  mkdir -p tmp
+  touch tmp/no-eslint-d
+
+  # Create both mocks
+  cat > "$MOCK_DIR/eslint_d" << 'EOF'
+#!/bin/bash
+echo "eslint_d called" > /tmp/eslint_d_called.txt
+exit 0
+EOF
+  chmod +x "$MOCK_DIR/eslint_d"
+  create_eslint_mock 0 ""
+
+  echo "console.log('test');" > "app.js"
+
+  run "$SCRIPT_PATH" app.js
+
+  [ "$status" -eq 0 ]
+  # eslint_d should NOT have been called
+  [ ! -f /tmp/eslint_d_called.txt ]
+
+  rm -f /tmp/eslint_d_called.txt
+}
+
+@test "shows install hint when eslint_d not available and not suppressed" {
+  unset NO_ESLINT_D
+  rm -f "$MOCK_DIR/eslint_d"
+
+  create_eslint_mock 0 ""
+  echo "console.log('test');" > "app.js"
+
+  # Remove eslint_d from PATH but keep system paths for basic commands
+  CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v nvm | tr '\n' ':')
+  run bash -c "PATH='$MOCK_DIR:$TEST_REPO/node_modules/.bin:$CLEAN_PATH' $SCRIPT_PATH app.js"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ "eslint_d is not installed" ]]
 }
