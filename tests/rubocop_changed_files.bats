@@ -8,6 +8,9 @@ setup() {
   # Store path to the script being tested
   SCRIPT_PATH="$SCRIPTS_DIR/rubocop_changed_files"
 
+  # Disable --server so tests use plain mock rubocop
+  export NO_RUBOCOP_SERVER=1
+
   # Create mock rubocop command
   MOCK_DIR="$TEST_REPO/.mocks"
   mkdir -p "$MOCK_DIR"
@@ -227,4 +230,83 @@ EOF
   [ "$status" -eq 0 ]
   output_stripped=$(echo "$output" | strip_colors)
   [[ "$output_stripped" == "rubocop: ✓" ]]
+}
+
+# --- rubocop --server tests ---
+
+@test "passes --server flag by default" {
+  unset NO_RUBOCOP_SERVER
+
+  cat > "$MOCK_DIR/rubocop" << 'EOF'
+#!/bin/bash
+echo "rubocop called with: $@" > /tmp/rubocop_server_args.txt
+echo "1 file inspected, no offenses detected"
+exit 0
+EOF
+  chmod +x "$MOCK_DIR/rubocop"
+  create_bundle_mock
+
+  mkdir -p app/models
+  echo "class User; end" > "app/models/user.rb"
+
+  run "$SCRIPT_PATH" app/models/user.rb
+
+  [ "$status" -eq 0 ]
+  [ -f /tmp/rubocop_server_args.txt ]
+  args=$(cat /tmp/rubocop_server_args.txt)
+  [[ "$args" =~ "--server" ]]
+
+  rm -f /tmp/rubocop_server_args.txt
+}
+
+@test "skips --server when NO_RUBOCOP_SERVER is set" {
+  export NO_RUBOCOP_SERVER=1
+
+  cat > "$MOCK_DIR/rubocop" << 'EOF'
+#!/bin/bash
+echo "rubocop called with: $@" > /tmp/rubocop_server_args.txt
+echo "1 file inspected, no offenses detected"
+exit 0
+EOF
+  chmod +x "$MOCK_DIR/rubocop"
+  create_bundle_mock
+
+  mkdir -p app/models
+  echo "class User; end" > "app/models/user.rb"
+
+  run "$SCRIPT_PATH" app/models/user.rb
+
+  [ "$status" -eq 0 ]
+  [ -f /tmp/rubocop_server_args.txt ]
+  args=$(cat /tmp/rubocop_server_args.txt)
+  [[ ! "$args" =~ "--server" ]]
+
+  rm -f /tmp/rubocop_server_args.txt
+}
+
+@test "skips --server when ./tmp/no-rubocop-server exists" {
+  unset NO_RUBOCOP_SERVER
+  mkdir -p tmp
+  touch tmp/no-rubocop-server
+
+  cat > "$MOCK_DIR/rubocop" << 'EOF'
+#!/bin/bash
+echo "rubocop called with: $@" > /tmp/rubocop_server_args.txt
+echo "1 file inspected, no offenses detected"
+exit 0
+EOF
+  chmod +x "$MOCK_DIR/rubocop"
+  create_bundle_mock
+
+  mkdir -p app/models
+  echo "class User; end" > "app/models/user.rb"
+
+  run "$SCRIPT_PATH" app/models/user.rb
+
+  [ "$status" -eq 0 ]
+  [ -f /tmp/rubocop_server_args.txt ]
+  args=$(cat /tmp/rubocop_server_args.txt)
+  [[ ! "$args" =~ "--server" ]]
+
+  rm -f /tmp/rubocop_server_args.txt
 }
