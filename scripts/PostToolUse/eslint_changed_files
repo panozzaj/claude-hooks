@@ -8,17 +8,6 @@
 
 set -e
 
-# Source nvm if available (needed for hooks which run in fresh shell)
-export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-if [ -s "$NVM_DIR/nvm.sh" ]; then
-  # shellcheck source=/dev/null
-  source "$NVM_DIR/nvm.sh" --no-use
-  # Use project's .nvmrc if present, otherwise default
-  if [ -f ".nvmrc" ]; then
-    nvm use --silent 2>/dev/null || true
-  fi
-fi
-
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -70,9 +59,28 @@ if [ -z "$CHANGED_FILES" ]; then
   exit 0
 fi
 
-# Determine ESLint command - prefer node_modules/.bin over ./bin wrappers (which add noise)
-if [ -f "node_modules/.bin/eslint" ]; then
+# Source nvm if available (needed for hooks which run in fresh shell)
+# Deferred until after extension check to avoid ~100ms cost on non-JS files
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # shellcheck source=/dev/null
+  source "$NVM_DIR/nvm.sh" --no-use
+  # Use project's .nvmrc if present, otherwise default
+  if [ -f ".nvmrc" ]; then
+    nvm use --silent 2>/dev/null || true
+  fi
+fi
+
+# Determine ESLint command - prefer eslint_d (daemon, ~0.1s warm) over cold eslint (~0.8s)
+# To disable eslint_d: set NO_ESLINT_D=1 or touch ./tmp/no-eslint-d
+# To suppress the "not installed" hint: touch ./tmp/no-eslint-d
+if command -v eslint_d &> /dev/null && [ -z "$NO_ESLINT_D" ] && [ ! -f "./tmp/no-eslint-d" ]; then
+  ESLINT_CMD="eslint_d"
+elif [ -f "node_modules/.bin/eslint" ]; then
   ESLINT_CMD="./node_modules/.bin/eslint"
+  if ! command -v eslint_d &> /dev/null && [ ! -f "./tmp/no-eslint-d" ]; then
+    echo "eslint_d is not installed. Install it to speed up linting: npm install -g eslint_d (touch ./tmp/no-eslint-d to suppress)" >&2
+  fi
 elif command -v yarn &> /dev/null; then
   ESLINT_CMD="yarn --silent eslint"
 else
