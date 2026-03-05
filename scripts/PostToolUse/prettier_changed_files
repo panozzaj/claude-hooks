@@ -27,9 +27,17 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then
   fi
 fi
 
-# Determine Prettier command - prefer node_modules/.bin over ./bin wrappers (which add noise)
-if [ -f "node_modules/.bin/prettier" ]; then
+# Determine Prettier command - prefer prettierd (daemon, ~0.04s warm) over cold prettier (~0.3s)
+# To disable prettierd: set NO_PRETTIERD=1 or touch ./tmp/no-prettierd
+# To suppress the "not installed" hint: touch ./tmp/no-prettierd
+USE_PRETTIERD=false
+if command -v prettierd &> /dev/null && [ -z "$NO_PRETTIERD" ] && [ ! -f "./tmp/no-prettierd" ]; then
+  USE_PRETTIERD=true
+elif [ -f "node_modules/.bin/prettier" ]; then
   PRETTIER_CMD="./node_modules/.bin/prettier"
+  if ! command -v prettierd &> /dev/null && [ ! -f "./tmp/no-prettierd" ]; then
+    echo "prettierd is not installed. Install it to speed up formatting: npm install -g @fsouza/prettierd (touch ./tmp/no-prettierd to suppress)" >&2
+  fi
 else
   PRETTIER_CMD="npx --silent prettier"
 fi
@@ -42,63 +50,84 @@ if [ "$VERBOSE" = true ]; then
   echo ""
 fi
 
-# Run Prettier with auto-format
-PRETTIER_OUTPUT=$(mktemp)
+# Format a file with prettierd (stdin/stdout) and write in-place if changed.
+# Returns 0 if successful (whether or not changes were made), 1 on error.
+# Sets CHANGES_DETECTED=true and appends to DIFF_OUTPUT if file was reformatted.
+prettierd_format_file() {
+  local file="$1"
+  local formatted
+  formatted=$(mktemp)
+
+  if ! prettierd "$file" < "$file" > "$formatted" 2>&1; then
+    echo "Prettier error on $file:" >&2
+    cat "$formatted" >&2
+    rm "$formatted"
+    return 1
+  fi
+
+  if ! diff -q "$file" "$formatted" > /dev/null 2>&1; then
+    CHANGES_DETECTED=true
+    local file_diff
+    file_diff=$(diff -U1 "$file" "$formatted" | tail -n +3 || true)
+    DIFF_OUTPUT="${DIFF_OUTPUT}${file}\n${file_diff}\n\n"
+    mv "$formatted" "$file"
+  else
+    rm "$formatted"
+  fi
+  return 0
+}
+
+# Format a file with prettier CLI and write in-place if changed.
+prettier_format_file() {
+  local file="$1"
+  local formatted
+  formatted=$(mktemp)
+
+  if ! $PRETTIER_CMD "$file" > "$formatted" 2>&1; then
+    echo "Prettier error on $file:" >&2
+    cat "$formatted" >&2
+    rm "$formatted"
+    return 1
+  fi
+
+  if ! diff -q "$file" "$formatted" > /dev/null 2>&1; then
+    CHANGES_DETECTED=true
+    local file_diff
+    file_diff=$(diff -U1 "$file" "$formatted" | tail -n +3 || true)
+    DIFF_OUTPUT="${DIFF_OUTPUT}${file}\n${file_diff}\n\n"
+    $PRETTIER_CMD --write "$file" > /dev/null 2>&1
+  fi
+
+  rm "$formatted"
+  return 0
+}
 
 set +e
 
-# Run prettier without --write to get formatted output on stdout
-$PRETTIER_CMD "$CHANGED_FILES" > "$PRETTIER_OUTPUT" 2>&1
-PRETTIER_STATUS=$?
-
-if [ $PRETTIER_STATUS -ne 0 ]; then
-  echo "Prettier encountered errors:" >&2
-  cat "$PRETTIER_OUTPUT" >&2
-  echo "" >&2
-  rm "$PRETTIER_OUTPUT"
-  hook_status fail
-fi
-
-# Compare formatted output with original file to detect changes
 CHANGES_DETECTED=false
 DIFF_OUTPUT=""
+HAD_ERRORS=false
 
 for file in $CHANGED_FILES; do
   if [ -f "$file" ]; then
-    FORMATTED=$(mktemp)
-    $PRETTIER_CMD "$file" > "$FORMATTED" 2>/dev/null
-
-    if ! diff -q "$file" "$FORMATTED" > /dev/null 2>&1; then
-      CHANGES_DETECTED=true
-      FILE_DIFF=$(diff -U1 "$file" "$FORMATTED" | tail -n +3 || true)
-      DIFF_OUTPUT="${DIFF_OUTPUT}${file}\n${FILE_DIFF}\n\n"
+    if [ "$USE_PRETTIERD" = true ]; then
+      prettierd_format_file "$file" || HAD_ERRORS=true
+    else
+      prettier_format_file "$file" || HAD_ERRORS=true
     fi
-
-    rm "$FORMATTED"
   fi
 done
 
-if [ "$CHANGES_DETECTED" = false ]; then
-  rm "$PRETTIER_OUTPUT"
-  hook_status pass
-fi
-
-# Apply formatting with --write
-WRITE_OUTPUT=$(mktemp)
-$PRETTIER_CMD --write "$CHANGED_FILES" > "$WRITE_OUTPUT" 2>&1
-WRITE_STATUS=$?
 set -e
 
-if [ $WRITE_STATUS -eq 0 ]; then
+if [ "$HAD_ERRORS" = true ]; then
+  hook_status fail
+fi
+
+if [ "$CHANGES_DETECTED" = true ]; then
   echo "Prettier reformatted:"
   echo ""
   echo -e "$DIFF_OUTPUT"
-  rm "$PRETTIER_OUTPUT" "$WRITE_OUTPUT"
-  hook_status pass
-else
-  echo "Prettier encountered errors:" >&2
-  cat "$WRITE_OUTPUT" >&2
-  echo "" >&2
-  rm "$PRETTIER_OUTPUT" "$WRITE_OUTPUT"
-  hook_status fail
 fi
+
+hook_status pass

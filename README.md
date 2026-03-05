@@ -198,6 +198,18 @@ See [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks#pers
 
 Note: you'll have to restart Claude Code for changes to take effect. You can use a [reload command](https://panozzaj.com/blog/2026/02/07/building-a-reload-command-for-claude-code/) to restart without losing session context.
 
+## Optional daemon tools
+
+Some hooks automatically use daemon/server versions of linters when available, falling back to cold invocations if not installed. These eliminate startup overhead and make hooks significantly faster:
+
+| Hook     | Daemon tool                                        | Install                            | Speedup        |
+| -------- | -------------------------------------------------- | ---------------------------------- | -------------- |
+| rubocop  | `rubocop --server` (built-in)                      | Already included in RuboCop 1.31+  | ~1.0s → ~0.2s  |
+| eslint   | [eslint_d](https://github.com/mantoni/eslint_d.js) | `npm install -g eslint_d`          | ~0.7s → ~0.06s |
+| prettier | [prettierd](https://github.com/fsouza/prettierd)   | `npm install -g @fsouza/prettierd` | ~0.3s → ~0.04s |
+
+Each can be disabled per-project by touching a file in `./tmp/` (e.g. `./tmp/no-eslint-d`, `./tmp/no-prettierd`) or via environment variables (`NO_RUBOCOP_SERVER`, `NO_ESLINT_D`, `NO_PRETTIERD`).
+
 ## Output Format
 
 All scripts follow a consistent 4-tier output pattern:
