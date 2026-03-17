@@ -67,13 +67,9 @@ rubocop: ✓
 
 **ESLint:**
 
+When ESLint auto-fixes all issues, the files are corrected silently (exit 0, no output):
+
 ```
-/path/to/app.js
-  5:1  error  Expected indentation of 2 spaces but found 4  indent
-
-✖ 1 problem (1 error, 0 warnings)
-  1 error and 0 warnings potentially fixable with the `--fix` option.
-
 eslint: ✓
 ```
 
@@ -188,4 +184,3 @@ Useful for benchmarking hook performance.
 - **Green ✓** - Success (clean or auto-fixed)
 - **Red ✗** - Failure (manual fixes needed)
 - **Gray N/A** - Not applicable (no files to check)
-- **Yellow** - Warning messages (only in verbose mode)
