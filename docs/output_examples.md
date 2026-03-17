@@ -77,7 +77,20 @@ src/components/App.tsx
 prettier: ✓
 ```
 
-**Note:** ESLint auto-fixes silently (no `[Corrected]`-style output). Only unfixable issues are reported.
+**ESLint:**
+
+ESLint runs twice: first to report issues, then with `--fix`. When all issues are auto-fixed, the original report is shown so the LLM sees what was corrected:
+
+```
+/path/to/app.js
+  5:1  error  Expected indentation of 2 spaces but found 4  indent
+  8:1  error  Expected indentation of 2 spaces but found 4  indent
+
+✖ 2 problems (2 errors, 0 warnings)
+  2 errors and 0 warnings potentially fixable with the `--fix` option.
+
+eslint: ✓
+```
 
 **Result:** Files are modified, output shown for LLM awareness, execution continues.
 

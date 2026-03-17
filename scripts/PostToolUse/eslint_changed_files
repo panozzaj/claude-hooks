@@ -47,14 +47,6 @@ if [ "$VERBOSE" = true ]; then
   echo ""
 fi
 
-# Run ESLint with auto-fix
-ESLINT_OUTPUT=$(mktemp)
-
-set +e
-$ESLINT_CMD --fix "$CHANGED_FILES" > "$ESLINT_OUTPUT" 2>&1
-ESLINT_STATUS=$?
-set -e
-
 # Filter out yarn/npx wrapper noise from output
 filter_yarn_noise() {
   grep -v "^yarn run" | \
@@ -65,16 +57,40 @@ filter_yarn_noise() {
   sed '/^$/N;/^\n$/D'  # Remove excessive blank lines
 }
 
-if [ $ESLINT_STATUS -eq 0 ]; then
-  if [ -s "$ESLINT_OUTPUT" ]; then
-    cat "$ESLINT_OUTPUT" | filter_yarn_noise
-    echo ""
-  fi
-  rm "$ESLINT_OUTPUT"
+# Step 1: Run ESLint in report-only mode to capture all issues
+ESLINT_REPORT=$(mktemp)
+
+set +e
+$ESLINT_CMD "$CHANGED_FILES" > "$ESLINT_REPORT" 2>&1
+REPORT_STATUS=$?
+set -e
+
+# If no issues found, we're done
+if [ $REPORT_STATUS -eq 0 ]; then
+  rm "$ESLINT_REPORT"
+  hook_status pass
+fi
+
+# Step 2: Run ESLint with --fix to auto-correct what it can
+set +e
+$ESLINT_CMD --fix "$CHANGED_FILES" > /dev/null 2>&1
+FIX_STATUS=$?
+set -e
+
+if [ $FIX_STATUS -eq 0 ]; then
+  # All issues were auto-fixed — show report so LLM sees what was corrected
+  cat "$ESLINT_REPORT" | filter_yarn_noise
+  echo ""
+  rm "$ESLINT_REPORT"
   hook_status pass
 else
-  cat "$ESLINT_OUTPUT" | filter_yarn_noise >&2
+  # Some issues remain — show what's still broken
+  ESLINT_REMAINING=$(mktemp)
+  set +e
+  $ESLINT_CMD "$CHANGED_FILES" > "$ESLINT_REMAINING" 2>&1
+  set -e
+  cat "$ESLINT_REMAINING" | filter_yarn_noise >&2
   echo "" >&2
-  rm "$ESLINT_OUTPUT"
+  rm "$ESLINT_REPORT" "$ESLINT_REMAINING"
   hook_status fail
 fi
