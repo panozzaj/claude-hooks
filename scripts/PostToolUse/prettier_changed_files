@@ -9,6 +9,10 @@
 # Uses Prettier's stdout output (default behavior) to compare against originals,
 # following the design principle that auto-fix scripts should show what was corrected.
 #
+# NOTE: Claude Code runs PostToolUse hooks in parallel. If both this hook and
+# eslint_changed_files are configured, they may race on the same JS/TS file.
+# Consider combining them into a single hook that runs prettier first, then eslint.
+#
 # See ../../docs/hook_interface.md for interface specification and exit code behavior
 
 set -e

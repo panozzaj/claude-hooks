@@ -5,6 +5,10 @@
 #   - As Claude Code hook: receives JSON via STDIN
 #   - Direct invocation: eslint_changed_files [-v|--verbose] [file1 file2 ...]
 #
+# NOTE: Claude Code runs PostToolUse hooks in parallel. If both this hook and
+# prettier_changed_files are configured, they may race on the same JS/TS file.
+# Consider combining them into a single hook that runs prettier first, then eslint.
+#
 # See ../../docs/hook_interface.md for interface specification and exit code behavior
 
 set -e
