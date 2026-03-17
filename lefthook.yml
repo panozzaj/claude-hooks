@@ -1,0 +1,19 @@
+output:
+  - summary
+  - failure
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: shellcheck
+      exclude: "*.{md,json,yml,yaml,txt,bats}"
+      run: |
+        files=""
+        for f in {staged_files}; do
+          if [[ "$f" =~ \.(sh|bash)$ ]] || head -1 "$f" 2>/dev/null | grep -qE '^#!.*\b(bash|sh|zsh)\b'; then
+            files="$files $f"
+          fi
+        done
+        if [ -n "$files" ]; then
+          shellcheck -x $files
+        fi
