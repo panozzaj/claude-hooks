@@ -65,13 +65,19 @@ app/models/user.rb:10:3: C: [Corrected] Style/StringLiterals: Prefer single-quot
 rubocop: ✓
 ```
 
-**ESLint:**
-
-When ESLint auto-fixes all issues, the files are corrected silently (exit 0, no output):
+**Prettier:**
 
 ```
-eslint: ✓
+Prettier reformatted:
+
+src/components/App.tsx
+-  const items = ["one","two","three"]
++  const items = ["one", "two", "three"]
+
+prettier: ✓
 ```
+
+**Note:** ESLint auto-fixes silently (no `[Corrected]`-style output). Only unfixable issues are reported.
 
 **Result:** Files are modified, output shown for LLM awareness, execution continues.
 
