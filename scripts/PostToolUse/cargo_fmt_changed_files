@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck source-path=SCRIPTDIR
 # Script to run cargo fmt on changed Rust files
 # Usage:
 #   - As Claude Code hook: receives JSON via STDIN

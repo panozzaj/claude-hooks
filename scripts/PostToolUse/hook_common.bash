@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034 # Variables here are used by the sourcing scripts
 # Common boilerplate for PostToolUse hook scripts.
 #
 # Usage: at the top of each hook, set HOOK_NAME and FILE_PATTERN, then source this file:
@@ -46,7 +47,8 @@ done
 
 elapsed_suffix() {
   if [ "$SHOW_TIME" = true ]; then
-    local end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
+    local end_ms
+    end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
     echo " $((end_ms - _HOOK_START_MS))ms"
   fi
 }

@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck source-path=SCRIPTDIR
 # Run ShellCheck on changed shell script files
 # Usage:
 #   - As Claude Code hook: receives JSON via STDIN
@@ -52,7 +53,7 @@ fi
 SHELLCHECK_OUTPUT=$(mktemp)
 
 set +e
-shellcheck "${SHELL_FILES[@]}" > "$SHELLCHECK_OUTPUT" 2>&1
+shellcheck -x "${SHELL_FILES[@]}" > "$SHELLCHECK_OUTPUT" 2>&1
 SHELLCHECK_STATUS=$?
 set -e
 

@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck source-path=SCRIPTDIR
 # Script to run TypeScript type checking on changed TypeScript files
 # Usage:
 #   - As Claude Code hook: receives JSON via STDIN

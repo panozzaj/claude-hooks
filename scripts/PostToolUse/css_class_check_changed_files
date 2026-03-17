@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck source-path=SCRIPTDIR
 # Validates that CSS classes used in template files exist in the project's compiled CSS.
 # Catches wrong Tailwind versions, typos, and made-up class names.
 #
@@ -177,7 +178,8 @@ for file in $FILTERED_FILES; do
   if [ -n "$INVALID" ]; then
     HAS_ERRORS=true
     # Format each invalid class with indent
-    FORMATTED=$(echo "$INVALID" | sed 's/^/  /')
+    FORMATTED="${INVALID//$'\n'/$'\n'  }"
+    FORMATTED="  ${FORMATTED}"
     ERROR_OUTPUT="${ERROR_OUTPUT}${file}:\n${FORMATTED}\n"
   fi
 done

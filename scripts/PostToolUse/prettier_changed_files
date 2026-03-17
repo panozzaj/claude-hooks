@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck source-path=SCRIPTDIR
 # Script to run Prettier on changed files
 # Usage:
 #   - As Claude Code hook: receives JSON via STDIN
@@ -58,6 +59,7 @@ prettierd_format_file() {
   local formatted
   formatted=$(mktemp)
 
+  # shellcheck disable=SC2094 # prettierd reads stdin fully before we write to $formatted
   if ! prettierd "$file" < "$file" > "$formatted" 2>&1; then
     echo "Prettier error on $file:" >&2
     cat "$formatted" >&2
