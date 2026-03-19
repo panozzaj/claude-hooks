@@ -9,7 +9,7 @@
 #   /any/other/path            -> basename
 
 # Touch ~/.claude-no-say to silence all say commands globally
-[ -f "$HOME/.claude-no-say" ] && exit 0
+[ -f "$HOME/.claude-no-say" ] && { echo "say silenced (rm ~/.claude-no-say to re-enable)" >&2; exit 0; }
 
 DEV_DIR="/Users/anthony/Documents/dev"
 TRIES_DIR="$DEV_DIR/tries"
