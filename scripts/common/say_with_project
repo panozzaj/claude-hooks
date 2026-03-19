@@ -8,6 +8,9 @@
 #   $dev/project/...           -> "project"
 #   /any/other/path            -> basename
 
+# Touch ~/.claude-no-say to silence all say commands globally
+[ -f "$HOME/.claude-no-say" ] && exit 0
+
 DEV_DIR="/Users/anthony/Documents/dev"
 TRIES_DIR="$DEV_DIR/tries"
 
